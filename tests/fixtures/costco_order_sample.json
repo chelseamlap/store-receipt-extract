@@ -1,4 +1,85 @@
 {
-  "_placeholder": true,
-  "_note": "Costco's real GraphQL response shape is TBD (step 6 is paused until captured from DevTools / the Desktop HAR). This is NOT a confirmed shape — do not write the Costco parser against it. Replace with a sanitized real sample once the operation name, query, and response are captured into docs/endpoints.md."
+  "_note": "SANITIZED sample matching the confirmed Costco GraphQL shapes (HAR-derived 2026-05-22). All values are fake. getOrderDetails in reality contains PII (name/address/email/card/membership) that the parser must NOT persist — omitted here on purpose. See docs/endpoints.md.",
+  "getOnlineOrders": {
+    "data": {
+      "getOnlineOrders": [
+        {
+          "pageNumber": 1,
+          "pageSize": 10,
+          "totalNumberOfRecords": 1,
+          "bcOrders": [
+            {
+              "orderHeaderId": "0000000000",
+              "orderPlacedDate": "2026-04-02T10:15:00Z",
+              "orderNumber": "100000000",
+              "orderTotal": 142.37,
+              "warehouseNumber": "0000",
+              "status": "DELIVERED",
+              "emailAddress": "REDACTED",
+              "orderLineItems": [
+                {
+                  "itemId": "111111",
+                  "itemNumber": "1111111",
+                  "itemDescription": "Organic Eggs, 24 ct",
+                  "lineNumber": 1,
+                  "status": "DELIVERED",
+                  "shippingType": "GROCERY"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "getOrderDetails": {
+    "data": {
+      "getOrderDetails": {
+        "orderNumber": "100000000",
+        "orderPlacedDate": "2026-04-02T10:15:00Z",
+        "warehouseNumber": "0000",
+        "status": "DELIVERED",
+        "merchandiseTotal": 130.0,
+        "shippingAndHandling": 0.0,
+        "uSTaxTotal1": 12.37,
+        "discountAmount": 0.0,
+        "orderTotal": 142.37,
+        "shipToAddress": [
+          {
+            "referenceNumber": "1",
+            "orderLineItems": [
+              {
+                "itemNumber": "1111111",
+                "itemDescription": "Organic Eggs, 24 ct",
+                "price": 9.99,
+                "quantity": 2,
+                "merchandiseTotalAmount": 19.98,
+                "shippingChargeAmount": 0.0,
+                "lineNumber": 1,
+                "itemTypeId": "GROCERY",
+                "programType": "GROCERY"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "products": {
+    "data": {
+      "products": {
+        "catalogData": [
+          {
+            "itemNumber": "1111111",
+            "catEntryId": "111111",
+            "published": true,
+            "description": { "shortDescription": "Organic Eggs, 24 ct" },
+            "fieldData": { "imageName": "1111111-0000.jpg" },
+            "additionalFieldData": { "fsa": false, "chdIndicator": false }
+          }
+        ],
+        "fulfillmentData": [{ "itemNumber": "1111111" }]
+      }
+    }
+  }
 }

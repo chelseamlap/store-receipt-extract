@@ -12,8 +12,9 @@ order_history_full_*.json
 orders_*.csv
 order_items_*.csv
 
-# Secrets / runtime config
+# Secrets / runtime config (location-revealing IDs, ZIP) — backup in Google Drive
 secrets.json
+config.local.json
 .env
 .env.*
 

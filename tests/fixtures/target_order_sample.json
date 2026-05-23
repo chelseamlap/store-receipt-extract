@@ -1,30 +1,61 @@
 {
-  "orderNumber": "900000000000001",
-  "orderDate": "2025-10-14T14:26:16-05:00",
-  "total": "58.78",
-  "orderType": "Sales",
-  "items": [
+  "_note": "SANITIZED sample matching the confirmed Target order_history shape (HAR-derived 2026-05-22). Fake values. Envelope from api.target.com/guest_order_aggregations/v1/order_history. See docs/endpoints.md.",
+  "metadata": {},
+  "guest_id": "REDACTED",
+  "total_orders": 1,
+  "total_pages": 1,
+  "orders": [
     {
-      "tcin": "11111111",
-      "description": "Unsalted Roasted Mixed Nuts, 30oz",
-      "quantity": 1,
-      "fulfillmentType": "ShipToHome",
-      "fulfillmentMethod": "SCHEDULED_DELIVERY",
-      "status": "STAT_SHOPPER_CLAIMED",
-      "statusDate": "2025-10-14T14:31:48-05:00",
-      "isReturnable": false,
-      "isCancellable": false
-    },
-    {
-      "tcin": "22222222",
-      "description": "Paper Towels, 6 \"Mega\" Rolls",
-      "quantity": 2,
-      "fulfillmentType": "ShipToHome",
-      "fulfillmentMethod": "SCHEDULED_DELIVERY",
-      "status": "STAT_DELIVERED",
-      "statusDate": "2025-10-16T09:02:00-05:00",
-      "isReturnable": true,
-      "isCancellable": false
+      "order_number": "900000000000001",
+      "placed_date": "2025-10-14T14:26:16-05:00",
+      "order_type": "Sales",
+      "order_purchase_type": "ONLINE",
+      "summary": { "grand_total": "58.78" },
+      "address": [{}],
+      "is_more_lines": false,
+      "has_adult_beverage_items": false,
+      "order_lines": [
+        {
+          "order_line_id": "1",
+          "order_line_key": "k1",
+          "original_quantity": 1,
+          "item": {
+            "tcin": "11111111",
+            "description": "Unsalted Roasted Mixed Nuts, 30oz",
+            "images": {}
+          },
+          "fulfillment_spec": {
+            "fulfillment_type": "ShipToHome",
+            "fulfillment_method": "SCHEDULED_DELIVERY",
+            "status": {
+              "code": "DELIVERED",
+              "key": "STAT_DELIVERED",
+              "date": "2025-10-16T09:02:00-05:00",
+              "quantity": 1
+            }
+          }
+        },
+        {
+          "order_line_id": "2",
+          "order_line_key": "k2",
+          "original_quantity": 2,
+          "item": {
+            "tcin": "22222222",
+            "description": "Paper Towels, 6 \"Mega\" Rolls",
+            "images": {}
+          },
+          "fulfillment_spec": {
+            "fulfillment_type": "ShipToHome",
+            "fulfillment_method": "SCHEDULED_DELIVERY",
+            "status": {
+              "code": "SHIPPED",
+              "key": "STAT_SHIPPED",
+              "date": "2025-10-15T08:00:00-05:00",
+              "quantity": 2
+            }
+          }
+        }
+      ]
     }
   ]
 }

@@ -35,6 +35,30 @@ captures and exports raw line + order data. The join against Simplifi's
 authoritative total and proportional allocation happens downstream (DuckDB /
 Sheets), out of scope here.
 
+## ADR-005 — Endpoint reality vs. original spec (from HAR mining)
+
+**Date:** 2026-05-22
+**Status:** Accepted
+
+HAR captures confirmed several deviations from the original spec; see
+`endpoints.md` for detail:
+
+- **Target order_history is on `api.target.com`**, not `redsky.target.com`.
+  Auth is the `x-api-key` public key header + session cookies (no bearer).
+  Real fields are `order_number` / `placed_date` / `order_lines[].item`, and
+  `summary` only carries `grand_total` (subtotal/tax/shipping stay null).
+- **Target enrichment endpoint was not captured** — its response shape stays
+  unconfirmed until step 5.
+- **Costco needs two order calls**: `getOnlineOrders` (paginated history, no
+  prices) then `getOrderDetails` (per-line `unitPrice` + order totals, nested
+  under `orderShipTos[].orderLineItems[]`). `getOrderDetails` is PII-heavy
+  (name/address/email/card/membership) — the parser must extract only money +
+  item fields and never persist PII.
+- **Costco has no category field** in the captured `products` query, so
+  `category_native` is null for Costco until the schema field is confirmed or a
+  coarse fallback (`itemTypeId`/`programType`) is adopted.
+- `receiptsWithCounts` is the in-warehouse/gas path — out of scope for v1.
+
 ## ADR-004 — Incremental scans via `scan_state`
 
 **Date:** 2026-05-22
