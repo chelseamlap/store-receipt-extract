@@ -3,6 +3,8 @@ node_modules/
 
 # Real-data captures and exports — NEVER commit these (privacy)
 *.har
+*.raw.json
+scratch/
 tests/fixtures/real_*
 tests/fixtures/*.real.json
 exports/
