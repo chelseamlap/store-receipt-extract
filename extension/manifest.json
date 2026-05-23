@@ -3,7 +3,7 @@
   "name": "store-receipt-extract",
   "version": "0.1.0",
   "description": "Extract itemized Target + Costco order history to CSV/JSON for personal spend analysis. Local-only.",
-  "permissions": ["storage", "downloads", "scripting", "activeTab"],
+  "permissions": ["storage", "downloads"],
   "host_permissions": [
     "https://www.target.com/*",
     "https://api.target.com/*",
@@ -19,24 +19,6 @@
     "default_title": "store-receipt-extract",
     "default_popup": "popup/popup.html"
   },
-  "content_scripts": [
-    {
-      "matches": ["https://www.target.com/orders*", "https://www.target.com/account*"],
-      "js": ["content/target.js"],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": ["https://www.costco.com/orders-and-purchases*", "https://www.costco.com/myaccount/*"],
-      "js": ["content/costco.js"],
-      "run_at": "document_idle"
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": ["content/common.js"],
-      "matches": ["https://www.target.com/*", "https://www.costco.com/*"]
-    }
-  ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self';"
   }

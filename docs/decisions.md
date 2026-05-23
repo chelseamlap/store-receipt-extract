@@ -35,6 +35,28 @@ captures and exports raw line + order data. The join against Simplifi's
 authoritative total and proportional allocation happens downstream (DuckDB /
 Sheets), out of scope here.
 
+## ADR-008 — Scan runs in the service worker, not content scripts
+
+**Date:** 2026-05-22
+**Status:** Accepted (supersedes ADR-006)
+
+In browser testing, fetching from the page/content-script context was blocked
+(`Failed to fetch`, including for the extension's own packaged config file), and
+content-script injection added a pile of timing/tab-selection failure modes.
+Moving all network work into the **service worker** fixed it: with
+`host_permissions` for the API hosts + `credentials: 'include'`, the worker's
+fetches ride on the logged-in session cookies and bypass page CORS, and no tab
+needs to be open. `background.js` now fetches order_history + order-detail
+directly, parses via `common.js` (imported as a normal ES module — no
+`web_accessible_resources` needed), and writes IndexedDB.
+
+Consequences: deleted the `content/target.js` / `content/costco.js` content
+scripts; dropped the `scripting`/`activeTab` permissions and
+`web_accessible_resources`. `common.js` is now a shared library used by the
+worker (still node-testable). The public Target key is a built-in default
+(safe per endpoints.md); location IDs still come from the optional gitignored
+`config.local.json`. ADR-006 (content-script dynamic import) no longer applies.
+
 ## ADR-007 — Target enrichment uses the order-detail endpoint, not product_summary
 
 **Date:** 2026-05-22
@@ -59,7 +81,8 @@ along on the order detail.
 ## ADR-006 — Content scripts load shared code via dynamic import
 
 **Date:** 2026-05-22
-**Status:** Accepted
+**Status:** Superseded by ADR-008 (scanning moved to the service worker; no
+content scripts)
 
 No build step means no bundler to inline shared parser/throttle code. MV3
 content scripts can't use static `import` of other extension files, so the

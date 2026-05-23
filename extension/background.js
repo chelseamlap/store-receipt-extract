@@ -1,75 +1,148 @@
-// background.js — MV3 service worker. Holds scan orchestration and owns the
-// IndexedDB writes. Content scripts do the authenticated fetching + parsing
-// (steps 5/6) and hand normalized orders back here to persist.
+// background.js — MV3 service worker. Owns the entire scan: it fetches the
+// retailer APIs directly (host_permissions + credentials:'include' ride on the
+// logged-in session cookies, and extension-worker fetches bypass page CORS),
+// parses via common.js, and writes to IndexedDB. No content script / tab is
+// needed — the cookies live in the jar whether or not a retailer tab is open.
 
 import * as db from './db.js';
+import {
+  parseTargetOrderHistory,
+  mergeTargetDetail,
+  throttledFetchJson,
+} from './content/common.js';
 
-const RETAILER_HOST = {
-  target: 'https://www.target.com/',
-  costco: 'https://www.costco.com/',
+console.log('[sre] background service worker loaded');
+
+// Public, non-sensitive defaults — documented as safe to commit in
+// docs/endpoints.md (the Target key + Costco clientId are public frontend
+// identifiers). Location-revealing values (store_id, zip, warehouse) are NOT
+// here — they come only from the gitignored config.local.json when present.
+const PUBLIC_CONFIG_DEFAULTS = {
+  target: { api_key: 'ff457966e64d5e877fdbad070f276d18ecec4a01' },
+  costco: { client_id: '4900eb1f-0c10-4bd9-99c3-c59e6c1ecebf', locale: ['en-US'] },
 };
 
-// Runtime config (gitignored, packaged with the extension). Holds the public
-// API key + location IDs the scan/enrichment needs. Loaded once, cached.
+function mergeConfig(base, override) {
+  const out = { ...base };
+  for (const key of Object.keys(override || {})) {
+    out[key] = { ...(base[key] || {}), ...(override[key] || {}) };
+  }
+  return out;
+}
+
+// Runtime config: public defaults overlaid with the optional gitignored
+// config.local.json (location IDs). Loaded once, cached. The file is optional —
+// if it can't be read, the public defaults still let Target scan.
 let configPromise = null;
 async function loadConfig() {
   if (!configPromise) {
-    configPromise = fetch(chrome.runtime.getURL('config.local.json'))
-      .then((r) => (r.ok ? r.json() : {}))
-      .catch(() => ({}));
+    configPromise = (async () => {
+      let fileCfg = {};
+      try {
+        const res = await fetch(chrome.runtime.getURL('config.local.json'));
+        if (res.ok) fileCfg = await res.json();
+        else console.warn('[sre] config.local.json status', res.status);
+      } catch (err) {
+        console.warn('[sre] config.local.json unreadable; using public defaults:', err.message);
+      }
+      return mergeConfig(PUBLIC_CONFIG_DEFAULTS, fileCfg);
+    })();
   }
   return configPromise;
 }
 
-// Find an open, logged-in retailer tab to run the scan in. Returns the tab or
-// null. (We don't open one automatically — the user must be logged in.)
-async function findRetailerTab(retailer) {
-  const pattern = `${RETAILER_HOST[retailer]}*`;
-  const tabs = await chrome.tabs.query({ url: pattern });
-  return tabs[0] ?? null;
+// ---------------------------------------------------------------------------
+// Target scan
+// ---------------------------------------------------------------------------
+
+const TARGET_ORDER_HISTORY = 'https://api.target.com/guest_order_aggregations/v1/order_history';
+const TARGET_ORDER_DETAIL = 'https://api.target.com/post_orders/v1';
+
+function targetHistoryUrl(pageNumber) {
+  const p = new URLSearchParams({
+    page_number: String(pageNumber),
+    page_size: '10',
+    order_purchase_type: 'ONLINE',
+    pending_order: 'true',
+    shipt_status: 'true',
+  });
+  return `${TARGET_ORDER_HISTORY}?${p}`;
 }
 
-// Ask the content script in `tab` to run a scan. The content script streams
-// normalized orders back via STORE_ORDERS messages and resolves when done.
-async function delegateScan(retailer, mode) {
-  const tab = await findRetailerTab(retailer);
-  if (!tab) {
-    return {
-      ok: false,
-      error: `Open and log into ${RETAILER_HOST[retailer]} in a tab, then scan.`,
-    };
-  }
-  const [config, scanState] = await Promise.all([loadConfig(), db.getScanState(retailer)]);
+// Enrich one order with per-line price/tax/category from the order-detail
+// endpoint. Non-fatal: on failure the order keeps its order_history fields.
+async function enrichTargetOrder(order, headers) {
+  const url = `${TARGET_ORDER_DETAIL}/${encodeURIComponent(order.order_id)}`;
   try {
-    const result = await chrome.tabs.sendMessage(tab.id, {
-      type: 'BEGIN_SCAN',
-      retailer,
-      mode,
-      scanState,
-      config,
-    });
-    return result ?? { ok: false, error: 'No response from content script.' };
+    const detail = await throttledFetchJson(url, { headers });
+    mergeTargetDetail(order, detail);
   } catch (err) {
-    // No receiver = content script not injected (page not an orders page yet).
-    return { ok: false, error: `Could not reach the ${retailer} page: ${err.message}` };
+    console.warn('[sre] detail enrichment failed for', order.order_id, err.message);
   }
+}
+
+async function scanTarget(mode, config) {
+  const apiKey = config?.target?.api_key;
+  if (!apiKey) return { ok: false, error: 'No Target API key available.' };
+  const headers = { 'x-api-key': apiKey };
+
+  const scanState = await db.getScanState('target');
+  const stopId = mode === 'full' ? null : scanState?.latest_order_id_seen ?? null;
+
+  let page = 1;
+  let totalPages = Infinity;
+  let newest = null;
+  let stored = 0;
+
+  while (page <= totalPages) {
+    let envelope;
+    try {
+      envelope = await throttledFetchJson(targetHistoryUrl(page), { headers });
+    } catch (err) {
+      return { ok: false, error: `order_history page ${page}: ${err.message}`, stored };
+    }
+    totalPages = Number.isFinite(envelope?.total_pages) ? envelope.total_pages : page;
+
+    const { orders } = parseTargetOrderHistory(envelope);
+    if (orders.length === 0) break;
+
+    let reachedKnown = false;
+    for (const order of orders) {
+      if (!newest) newest = { id: order.order_id, date: order.ordered_at };
+      if (stopId && order.order_id === stopId) {
+        reachedKnown = true;
+        break;
+      }
+      await enrichTargetOrder(order, headers);
+      await db.upsertOrder(order);
+      stored += 1;
+    }
+    if (reachedKnown) break;
+    page += 1;
+  }
+
+  if (newest) {
+    await db.setScanState('target', {
+      last_scan_at: new Date().toISOString(),
+      latest_order_id_seen: newest.id,
+      latest_order_date_seen: newest.date,
+    });
+  }
+  return { ok: true, stored };
+}
+
+async function scanRetailer(retailer, mode) {
+  const config = await loadConfig();
+  console.log('[sre] scan', retailer, mode, '— target.api_key present:', !!config.target?.api_key);
+  if (retailer === 'target') return scanTarget(mode, config);
+  if (retailer === 'costco') return { ok: false, error: 'Costco scan not implemented yet (step 6).' };
+  return { ok: false, error: `Unknown retailer: ${retailer}` };
 }
 
 async function handleMessage(msg) {
   switch (msg?.type) {
-    case 'STORE_ORDERS': {
-      // Content scripts send already-normalized order records here.
-      const orders = Array.isArray(msg.orders) ? msg.orders : [];
-      for (const order of orders) {
-        await db.upsertOrder(order);
-      }
-      return { ok: true, stored: orders.length };
-    }
-    case 'SET_SCAN_STATE':
-      await db.setScanState(msg.retailer, msg.state);
-      return { ok: true };
     case 'SCAN':
-      return delegateScan(msg.retailer, msg.mode);
+      return scanRetailer(msg.retailer, msg.mode);
     default:
       return { ok: false, error: `Unknown message type: ${msg?.type}` };
   }

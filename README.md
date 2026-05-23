@@ -62,6 +62,10 @@ Early scaffold. Build order (see project spec):
 2. ✅ IndexedDB wrapper + tests
 3. ✅ Extension skeleton (manifest, popup, service worker)
 4. ✅ Export (CSV / JSON) + tests
-5. ✅ Target content script — order_history fetch + parse + incremental, plus
-   order-detail enrichment (per-line price, tax/fee totals, dpci category); tested
-6. ⬜ Costco content script — GraphQL shapes captured (see endpoints.md); ready to build
+5. ✅ Target scan (in the service worker) — order_history fetch + parse +
+   incremental + order-detail enrichment (price, tax/fee totals, dpci category);
+   verified end-to-end in Chrome
+6. ⬜ Costco scan (service worker) — GraphQL shapes captured (see endpoints.md); ready to build
+
+Note: scanning runs entirely in the service worker (ADR-008); there are no
+content scripts. `extension/content/common.js` is a shared parser/throttle lib.

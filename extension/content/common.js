@@ -1,7 +1,6 @@
-// content/common.js — shared helpers for the retailer content scripts.
-// Pure parsers + a token-bucket throttle + a throttled fetch wrapper. ES
-// module: node tests import it directly; content scripts pull it in via
-// `await import(chrome.runtime.getURL('content/common.js'))` (see ADR-006).
+// content/common.js — shared library: pure parsers + a token-bucket throttle +
+// a throttled fetch wrapper. ES module imported by the service worker
+// (background.js) and by node tests. Not a content script (see ADR-008).
 
 // ---------------------------------------------------------------------------
 // Throttle: token bucket, 2 req/sec per upstream host, with small jitter.
