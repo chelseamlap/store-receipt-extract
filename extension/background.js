@@ -9,6 +9,18 @@ const RETAILER_HOST = {
   costco: 'https://www.costco.com/',
 };
 
+// Runtime config (gitignored, packaged with the extension). Holds the public
+// API key + location IDs the scan/enrichment needs. Loaded once, cached.
+let configPromise = null;
+async function loadConfig() {
+  if (!configPromise) {
+    configPromise = fetch(chrome.runtime.getURL('config.local.json'))
+      .then((r) => (r.ok ? r.json() : {}))
+      .catch(() => ({}));
+  }
+  return configPromise;
+}
+
 // Find an open, logged-in retailer tab to run the scan in. Returns the tab or
 // null. (We don't open one automatically — the user must be logged in.)
 async function findRetailerTab(retailer) {
@@ -27,8 +39,15 @@ async function delegateScan(retailer, mode) {
       error: `Open and log into ${RETAILER_HOST[retailer]} in a tab, then scan.`,
     };
   }
+  const [config, scanState] = await Promise.all([loadConfig(), db.getScanState(retailer)]);
   try {
-    const result = await chrome.tabs.sendMessage(tab.id, { type: 'BEGIN_SCAN', retailer, mode });
+    const result = await chrome.tabs.sendMessage(tab.id, {
+      type: 'BEGIN_SCAN',
+      retailer,
+      mode,
+      scanState,
+      config,
+    });
     return result ?? { ok: false, error: 'No response from content script.' };
   } catch (err) {
     // No receiver = content script not injected (page not an orders page yet).

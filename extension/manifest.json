@@ -33,7 +33,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["content/common.js", "db.js"],
+      "resources": ["content/common.js"],
       "matches": ["https://www.target.com/*", "https://www.costco.com/*"]
     }
   ],

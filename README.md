@@ -62,5 +62,6 @@ Early scaffold. Build order (see project spec):
 2. ✅ IndexedDB wrapper + tests
 3. ✅ Extension skeleton (manifest, popup, service worker)
 4. ✅ Export (CSV / JSON) + tests
-5. ⬜ Target content script + enrichment
+5. 🔶 Target content script — order_history fetch + parse + incremental + tests done;
+   product_summary **enrichment pending** (endpoint shape not yet captured)
 6. ⬜ Costco content script — GraphQL shapes captured (see endpoints.md); ready to build
