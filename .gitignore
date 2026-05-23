@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Real-data captures and exports — NEVER commit these (privacy)
+*.har
+tests/fixtures/real_*
+tests/fixtures/*.real.json
+exports/
+*_export_*.csv
+*_export_*.json
+order_history_full_*.json
+orders_*.csv
+order_items_*.csv
+
+# Secrets / runtime config
+secrets.json
+.env
+.env.*
+
+# OS / editor cruft
+.DS_Store
+*.swp
+.idea/
+.vscode/

@@ -1,0 +1,4 @@
+{
+  "_placeholder": true,
+  "_note": "Costco's real GraphQL response shape is TBD (step 6 is paused until captured from DevTools / the Desktop HAR). This is NOT a confirmed shape — do not write the Costco parser against it. Replace with a sanitized real sample once the operation name, query, and response are captured into docs/endpoints.md."
+}

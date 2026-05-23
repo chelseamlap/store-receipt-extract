@@ -1,0 +1,6 @@
+{
+  "_stub": "Placeholder manifest. The real MV3 manifest (host_permissions, strict CSP, permissions, service_worker, content_scripts, popup) is built in step 3.",
+  "manifest_version": 3,
+  "name": "store-receipt-extract",
+  "version": "0.1.0"
+}

@@ -1,0 +1,30 @@
+{
+  "orderNumber": "900000000000001",
+  "orderDate": "2025-10-14T14:26:16-05:00",
+  "total": "58.78",
+  "orderType": "Sales",
+  "items": [
+    {
+      "tcin": "11111111",
+      "description": "Unsalted Roasted Mixed Nuts, 30oz",
+      "quantity": 1,
+      "fulfillmentType": "ShipToHome",
+      "fulfillmentMethod": "SCHEDULED_DELIVERY",
+      "status": "STAT_SHOPPER_CLAIMED",
+      "statusDate": "2025-10-14T14:31:48-05:00",
+      "isReturnable": false,
+      "isCancellable": false
+    },
+    {
+      "tcin": "22222222",
+      "description": "Paper Towels, 6 \"Mega\" Rolls",
+      "quantity": 2,
+      "fulfillmentType": "ShipToHome",
+      "fulfillmentMethod": "SCHEDULED_DELIVERY",
+      "status": "STAT_DELIVERED",
+      "statusDate": "2025-10-16T09:02:00-05:00",
+      "isReturnable": true,
+      "isCancellable": false
+    }
+  ]
+}
