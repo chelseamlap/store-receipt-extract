@@ -129,17 +129,75 @@ export function parseTargetOrderHistory(envelope) {
   return out;
 }
 
-// Apply product_summary enrichment (price/category) onto an order's items,
-// keyed by TCIN. `byTcin` maps tcin -> { category_native, unit_price }.
-export function enrichTargetItems(order, byTcin) {
-  for (const item of order.items) {
-    const hit = item.sku ? byTcin[item.sku] : undefined;
-    if (!hit) continue;
-    if (hit.category_native != null) item.category_native = hit.category_native;
-    if (hit.unit_price != null) {
-      item.unit_price = hit.unit_price;
-      if (item.quantity != null) item.line_total = +(hit.unit_price * item.quantity).toFixed(2);
+// Target's DPCI (Department-Class-Item, e.g. "037-11-9248") encodes the native
+// merchandising taxonomy; the first segment is the department. We expose the
+// department code as category_native and keep the full DPCI on the item.
+export function departmentFromDpci(dpci) {
+  if (typeof dpci !== 'string') return null;
+  const dept = dpci.split('-')[0]?.trim();
+  return dept ? dept : null;
+}
+
+// Parse the post_orders/v1/{order_number} detail response into the money +
+// line fields we keep. Strips PII (guest_profile, payments, addresses are
+// never read). Returns null on an unexpected shape so the caller can fall back
+// to the order_history-only record.
+export function parseTargetOrderDetail(detail, orderId) {
+  const summary = detail?.summary;
+  const packages = detail?.packages;
+  if (!summary || !Array.isArray(packages)) {
+    logUnexpectedShape('$.summary / $.packages', orderId ?? detail?.order_number);
+    return null;
+  }
+
+  const items = [];
+  for (const pkg of packages) {
+    for (const line of pkg?.order_lines ?? []) {
+      const it = line?.item ?? {};
+      const quantity = toNumberOrNull(line?.quantity) ?? toNumberOrNull(line?.original_quantity);
+      const unitPrice = toNumberOrNull(it.unit_price);
+      items.push({
+        line_index: items.length,
+        sku: it.tcin ?? null,
+        name: it.description ?? null,
+        quantity,
+        unit_price: unitPrice,
+        line_total:
+          unitPrice != null && quantity != null ? +(unitPrice * quantity).toFixed(2) : null,
+        category_native: departmentFromDpci(it.dpci),
+        dpci: it.dpci ?? null,
+        raw_item: line,
+      });
     }
   }
+
+  return {
+    totals: {
+      total: toNumberOrNull(summary.grand_total),
+      subtotal: toNumberOrNull(summary.total_product_price),
+      tax: toNumberOrNull(summary.total_taxes),
+      shipping: toNumberOrNull(summary.total_shipping_charges),
+    },
+    fulfillment_type: packages[0]?.fulfillment?.fulfillment_type ?? null,
+    items,
+    // PII-free money breakdown kept for full-fidelity JSON export.
+    raw_summary: summary,
+  };
+}
+
+// Merge a parsed detail onto an order_history record. Detail is authoritative
+// for prices/category/totals; order_history is kept as `raw`. No-op if detail
+// failed to parse (leaves null prices). Does NOT persist PII from the detail.
+export function mergeTargetDetail(order, detail) {
+  const parsed = detail && !detail.totals ? parseTargetOrderDetail(detail, order.order_id) : detail;
+  if (!parsed) return order;
+
+  order.total = parsed.totals.total ?? order.total;
+  order.subtotal = parsed.totals.subtotal ?? order.subtotal;
+  order.tax = parsed.totals.tax ?? order.tax;
+  order.shipping = parsed.totals.shipping ?? order.shipping;
+  order.fulfillment_type = parsed.fulfillment_type ?? order.fulfillment_type;
+  if (parsed.items.length) order.items = parsed.items;
+  order.raw_summary = parsed.raw_summary;
   return order;
 }

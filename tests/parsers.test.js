@@ -7,12 +7,17 @@ import { fileURLToPath } from 'node:url';
 
 import {
   parseTargetOrderHistory,
-  enrichTargetItems,
+  parseTargetOrderDetail,
+  mergeTargetDetail,
+  departmentFromDpci,
   TokenBucket,
 } from '../extension/content/common.js';
 
 const targetFixture = JSON.parse(
   readFileSync(fileURLToPath(new URL('./fixtures/target_order_sample.json', import.meta.url)), 'utf8')
+);
+const targetDetailFixture = JSON.parse(
+  readFileSync(fileURLToPath(new URL('./fixtures/target_order_detail_sample.json', import.meta.url)), 'utf8')
 );
 
 test('parseTargetOrderHistory normalizes the confirmed shape', () => {
@@ -52,17 +57,61 @@ test('parseTargetOrderHistory tolerates a non-array orders field', () => {
   assert.deepEqual(parseTargetOrderHistory(null), { orders: [], skipped: 0 });
 });
 
-test('enrichTargetItems applies price/category by TCIN and computes line_total', () => {
-  const { orders } = parseTargetOrderHistory(targetFixture);
-  const order = orders[0];
-  enrichTargetItems(order, {
-    '11111111': { category_native: 'Grocery', unit_price: 5.49 },
-    '22222222': { category_native: 'Household', unit_price: 12.0 },
-  });
-  assert.equal(order.items[0].category_native, 'Grocery');
+test('departmentFromDpci returns the leading department segment', () => {
+  assert.equal(departmentFromDpci('037-11-9248'), '037');
+  assert.equal(departmentFromDpci('058-02-1234'), '058');
+  assert.equal(departmentFromDpci(null), null);
+  assert.equal(departmentFromDpci(''), null);
+});
+
+test('parseTargetOrderDetail extracts totals + lines and ignores PII', () => {
+  const parsed = parseTargetOrderDetail(targetDetailFixture, '900000000000001');
+  assert.deepEqual(parsed.totals, { total: 58.78, subtotal: 53.49, tax: 5.19, shipping: 0 });
+  assert.equal(parsed.fulfillment_type, 'ShipToHome');
+  assert.equal(parsed.items.length, 2);
+  assert.deepEqual(
+    parsed.items.map((i) => [i.sku, i.unit_price, i.quantity, i.line_total, i.category_native, i.dpci]),
+    [
+      ['11111111', 5.49, 1, 5.49, '058', '058-02-1234'],
+      ['22222222', 24.0, 2, 48.0, '253', '253-07-0099'],
+    ]
+  );
+  // The parsed result must not surface guest_profile / payments anywhere.
+  const blob = JSON.stringify(parsed);
+  assert.ok(!blob.includes('guest_profile'));
+  assert.ok(!blob.includes('card_number'));
+  assert.ok(!blob.includes('email_id'));
+});
+
+test('parseTargetOrderDetail returns null on unexpected shape', () => {
+  assert.equal(parseTargetOrderDetail({}, 'x'), null);
+  assert.equal(parseTargetOrderDetail({ summary: {} }, 'x'), null);
+});
+
+test('mergeTargetDetail makes the detail authoritative, keeps order_history as raw, drops PII', () => {
+  const order = parseTargetOrderHistory(targetFixture).orders[0];
+  mergeTargetDetail(order, targetDetailFixture);
+
+  assert.equal(order.subtotal, 53.49);
+  assert.equal(order.tax, 5.19);
+  assert.equal(order.shipping, 0);
+  assert.equal(order.total, 58.78);
   assert.equal(order.items[0].unit_price, 5.49);
-  assert.equal(order.items[0].line_total, 5.49); // qty 1
-  assert.equal(order.items[1].line_total, 24.0); // qty 2 * 12.00
+  assert.equal(order.items[0].line_total, 5.49);
+  assert.equal(order.items[1].line_total, 48.0);
+  assert.equal(order.items[0].category_native, '058');
+  // raw stays the order_history order (low-PII), raw_summary is money-only
+  assert.equal(order.raw.order_number, '900000000000001');
+  assert.equal(order.raw_summary.total_taxes, 5.19);
+  assert.ok(!JSON.stringify(order).includes('card_number'));
+  assert.ok(!JSON.stringify(order).includes('guest_profile'));
+});
+
+test('mergeTargetDetail is a no-op when detail parsing fails', () => {
+  const order = parseTargetOrderHistory(targetFixture).orders[0];
+  const before = JSON.stringify(order);
+  mergeTargetDetail(order, { summary: null });
+  assert.equal(JSON.stringify(order), before);
 });
 
 test('TokenBucket gates the 3rd request in a 2-req/sec window', async () => {

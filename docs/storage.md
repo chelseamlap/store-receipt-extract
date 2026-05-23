@@ -33,14 +33,21 @@ Record shape:
       quantity: 1,
       unit_price: null,
       line_total: null,
-      category_native: "Grocery",        // retailer's own category, not my taxonomy
+      category_native: "037",            // retailer's own category code (Target: DPCI department)
+      dpci: "037-11-9248",               // Target only: full DPCI; null for Costco
       raw_item: { /* raw item subobject */ }
     }
   ],
+  raw_summary: { /* Target only: PII-free money breakdown from order detail */ },
   first_seen_at: "2025-10-14T20:00:00Z", // wall-clock when first scanned
   last_updated_at: "2025-10-14T20:00:00Z"
 }
 ```
+
+For Target, `category_native` is the DPCI **department code** (first segment),
+and `subtotal`/`tax`/`shipping`/per-line `unit_price` come from the order-detail
+endpoint (see [endpoints.md](endpoints.md) and ADR-007). PII from that response
+is never persisted.
 
 **Upsert behavior:** re-scanning an already-stored order **replaces the record
 wholesale** (raw, total, items). This handles status changes (e.g. shipped →

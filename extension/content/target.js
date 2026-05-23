@@ -1,13 +1,13 @@
 // content/target.js — runs on logged-in target.com pages. On BEGIN_SCAN it
 // pages through order_history (session cookies + public x-api-key), normalizes
-// via common.js, and streams orders to the service worker to persist.
-//
-// Enrichment (per-line price/category via product_summary_with_fulfillment) is
-// NOT wired yet — that endpoint's response shape wasn't in the HAR. Items are
-// stored with null unit_price/category_native until it's captured (see
-// docs/endpoints.md). common.enrichTargetItems() is ready for when it is.
+// via common.js, enriches each order from the order-detail endpoint
+// (per-line unit_price + tax/fee totals + dpci category), then streams the
+// orders to the service worker to persist. PII in the detail response
+// (guest_profile, payments, addresses) is never read/persisted — see
+// docs/endpoints.md and common.parseTargetOrderDetail().
 
 const ORDER_HISTORY_URL = 'https://api.target.com/guest_order_aggregations/v1/order_history';
+const ORDER_DETAIL_URL = 'https://api.target.com/post_orders/v1'; // + /{order_number}
 const PAGE_SIZE = 10;
 
 let commonPromise = null;
@@ -25,6 +25,19 @@ function pageUrl(pageNumber) {
     shipt_status: 'true',
   });
   return `${ORDER_HISTORY_URL}?${p}`;
+}
+
+// Fetch the order-detail and merge prices/tax/category onto the order.
+// A failed detail fetch is non-fatal: the order is still stored with its
+// order_history fields (null prices) so the scan doesn't abort.
+async function enrichOrder(common, order, headers) {
+  const url = `${ORDER_DETAIL_URL}/${encodeURIComponent(order.order_id)}`;
+  try {
+    const detail = await common.throttledFetchJson(url, { headers });
+    common.mergeTargetDetail(order, detail);
+  } catch (err) {
+    console.warn(`detail enrichment failed for order ${order.order_id}: ${err.message}`);
+  }
 }
 
 async function runScan({ mode, scanState, config }) {
@@ -60,6 +73,7 @@ async function runScan({ mode, scanState, config }) {
         reachedKnown = true;
         break;
       }
+      await enrichOrder(common, order, headers);
       batch.push(order);
     }
 

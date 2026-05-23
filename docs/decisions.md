@@ -35,6 +35,27 @@ captures and exports raw line + order data. The join against Simplifi's
 authoritative total and proportional allocation happens downstream (DuckDB /
 Sheets), out of scope here.
 
+## ADR-007 — Target enrichment uses the order-detail endpoint, not product_summary
+
+**Date:** 2026-05-22
+**Status:** Accepted (supersedes the earlier product_summary plan)
+
+The authoritative `docs/endpoints.md` shows per-line prices, full tax/fee
+breakdown, and `dpci` all come from `GET api.target.com/post_orders/v1/
+{order_number}`. So `target.js` fetches that detail per order and merges it:
+detail is authoritative for `unit_price` / `line_total` / totals
+(`subtotal`=`total_product_price`, `tax`=`total_taxes`,
+`shipping`=`total_shipping_charges`), and `category_native` = the DPCI
+department (first segment of e.g. `037-11-9248`). The full DPCI is kept on each
+item; the money-only `summary` is kept as `order.raw_summary` for full-fidelity
+export.
+
+PII in the detail (`guest_profile`, `payments`, addresses) is **never read or
+persisted** — `parseTargetOrderDetail` only touches `summary` + `packages`.
+A failed detail fetch is non-fatal: the order is stored with order_history
+fields (null prices). No separate product_cache call is needed since DPCI rides
+along on the order detail.
+
 ## ADR-006 — Content scripts load shared code via dynamic import
 
 **Date:** 2026-05-22
