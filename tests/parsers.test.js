@@ -10,6 +10,9 @@ import {
   parseTargetOrderDetail,
   mergeTargetDetail,
   departmentFromDpci,
+  parseCostcoOnlineOrders,
+  parseCostcoOrderDetail,
+  mergeCostcoDetail,
   TokenBucket,
 } from '../extension/content/common.js';
 
@@ -18,6 +21,9 @@ const targetFixture = JSON.parse(
 );
 const targetDetailFixture = JSON.parse(
   readFileSync(fileURLToPath(new URL('./fixtures/target_order_detail_sample.json', import.meta.url)), 'utf8')
+);
+const costcoFixture = JSON.parse(
+  readFileSync(fileURLToPath(new URL('./fixtures/costco_order_sample.json', import.meta.url)), 'utf8')
 );
 
 test('parseTargetOrderHistory normalizes the confirmed shape', () => {
@@ -112,6 +118,48 @@ test('mergeTargetDetail is a no-op when detail parsing fails', () => {
   const before = JSON.stringify(order);
   mergeTargetDetail(order, { summary: null });
   assert.equal(JSON.stringify(order), before);
+});
+
+test('parseCostcoOnlineOrders normalizes the array-wrapped envelope, drops emailAddress', () => {
+  const { orders, skipped } = parseCostcoOnlineOrders(costcoFixture.getOnlineOrders);
+  assert.equal(skipped, 0);
+  assert.equal(orders.length, 1);
+  const o = orders[0];
+  assert.equal(o.retailer, 'costco');
+  assert.equal(o.order_id, '100000000');
+  assert.equal(o.total, 142.37);
+  assert.equal(o.subtotal, null); // prices only come from getOrderDetails
+  assert.equal(o.items[0].sku, '1111111');
+  assert.equal(o.items[0].unit_price, null);
+  assert.ok(!JSON.stringify(o).includes('emailAddress'), 'PII dropped from raw');
+});
+
+test('parseCostcoOnlineOrders tolerates a missing/array-less envelope', () => {
+  assert.deepEqual(parseCostcoOnlineOrders({}), { orders: [], skipped: 0 });
+  assert.deepEqual(parseCostcoOnlineOrders({ data: { getOnlineOrders: [{}] } }), { orders: [], skipped: 0 });
+});
+
+test('parseCostcoOrderDetail extracts totals + nested line prices', () => {
+  const parsed = parseCostcoOrderDetail(costcoFixture.getOrderDetails);
+  assert.deepEqual(parsed.totals, { total: 142.37, subtotal: 130.0, tax: 12.37, shipping: 0 });
+  assert.equal(parsed.items.length, 1);
+  assert.deepEqual(
+    parsed.items.map((i) => [i.sku, i.unit_price, i.quantity, i.line_total]),
+    [['1111111', 9.99, 2, 19.98]]
+  );
+});
+
+test('mergeCostcoDetail makes detail authoritative and keeps it PII-free', () => {
+  const order = parseCostcoOnlineOrders(costcoFixture.getOnlineOrders).orders[0];
+  mergeCostcoDetail(order, costcoFixture.getOrderDetails);
+  assert.equal(order.subtotal, 130.0);
+  assert.equal(order.tax, 12.37);
+  assert.equal(order.total, 142.37);
+  assert.equal(order.items[0].unit_price, 9.99);
+  assert.equal(order.items[0].line_total, 19.98);
+  assert.equal(order.items[0].category_native, null); // Costco online: no category
+  assert.equal(order.raw_summary.merchandiseTotal, 130.0);
+  assert.ok(!JSON.stringify(order).includes('emailAddress'));
 });
 
 test('TokenBucket gates the 3rd request in a 2-req/sec window', async () => {

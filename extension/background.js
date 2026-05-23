@@ -8,6 +8,8 @@ import * as db from './db.js';
 import {
   parseTargetOrderHistory,
   mergeTargetDetail,
+  parseCostcoOnlineOrders,
+  mergeCostcoDetail,
   throttledFetchJson,
 } from './content/common.js';
 
@@ -131,11 +133,143 @@ async function scanTarget(mode, config) {
   return { ok: true, stored };
 }
 
+// ---------------------------------------------------------------------------
+// Costco scan (GraphQL over POST, on session cookies)
+// ---------------------------------------------------------------------------
+
+const COSTCO_ORDER_GQL = 'https://ecom-api.costco.com/ebusiness/order/v1/orders/graphql';
+const COSTCO_PAGE_SIZE = 10;
+const COSTCO_WINDOW_DAYS = 90; // Costco limits the date range; page in windows
+const COSTCO_LOOKBACK_DAYS = 1095; // ~3 years for a full scan
+const DAY_MS = 86400000;
+
+// Only PII-free fields are requested.
+const GET_ONLINE_ORDERS = `query getOnlineOrders($startDate:String!,$endDate:String!,$pageNumber:Int,$pageSize:Int,$warehouseNumber:String!){
+  getOnlineOrders(startDate:$startDate,endDate:$endDate,pageNumber:$pageNumber,pageSize:$pageSize,warehouseNumber:$warehouseNumber){
+    pageNumber pageSize totalNumberOfRecords
+    bcOrders{ orderHeaderId orderPlacedDate:orderedDate orderNumber:sourceOrderNumber orderTotal warehouseNumber status
+      orderLineItems{ itemId itemNumber lineNumber itemDescription } }
+  }
+}`;
+
+const GET_ORDER_DETAILS = `query getOrderDetails($orderNumbers:[String]){
+  getOrderDetails(orderNumbers:$orderNumbers){
+    warehouseNumber orderNumber:sourceOrderNumber orderPlacedDate:orderedDate status
+    merchandiseTotal shippingAndHandling retailDeliveryFee grocerySurcharge frozenSurchargeFee uSTaxTotal1 orderTotal discountAmount
+    shipToAddress:orderShipTos{ orderLineItems{ itemNumber itemDescription:sourceItemDescription price:unitPrice quantity:orderedTotalQuantity merchandiseTotalAmount lineNumber itemId programType } }
+  }
+}`;
+
+// Costco uses YYYY-M-DD with a non-zero-padded month (e.g. 2026-3-01).
+function costcoDateStr(d) {
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+async function costcoGraphql(query, variables) {
+  return throttledFetchJson(COSTCO_ORDER_GQL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, variables }),
+  });
+}
+
+// Enrich one order with prices/totals from getOrderDetails. Non-fatal.
+async function enrichCostcoOrder(order) {
+  try {
+    const env = await costcoGraphql(GET_ORDER_DETAILS, { orderNumbers: [order.order_id] });
+    if (env?.errors?.length) {
+      console.warn('[sre] costco detail errors', order.order_id, env.errors[0].message);
+      return;
+    }
+    mergeCostcoDetail(order, env);
+  } catch (err) {
+    console.warn('[sre] costco detail failed', order.order_id, err.message);
+  }
+}
+
+async function scanCostco(mode, config) {
+  const warehouse = config?.costco?.warehouse_number;
+  if (!warehouse) {
+    return {
+      ok: false,
+      error: 'Missing costco.warehouse_number — load the extension from the repo (config.local.json present).',
+    };
+  }
+
+  const scanState = await db.getScanState('costco');
+  const stopId = mode === 'full' ? null : scanState?.latest_order_id_seen ?? null;
+
+  const today = new Date();
+  const minDate =
+    mode !== 'full' && scanState?.latest_order_date_seen
+      ? new Date(new Date(scanState.latest_order_date_seen).getTime() - 7 * DAY_MS)
+      : new Date(today.getTime() - COSTCO_LOOKBACK_DAYS * DAY_MS);
+
+  let windowEnd = new Date(today);
+  let newest = null;
+  let stored = 0;
+  let reachedKnown = false;
+
+  // Walk newest -> oldest in date windows so incremental can stop early.
+  while (windowEnd > minDate && !reachedKnown) {
+    const windowStart = new Date(Math.max(windowEnd.getTime() - COSTCO_WINDOW_DAYS * DAY_MS, minDate.getTime()));
+    let page = 1;
+    let total = Infinity;
+
+    while ((page - 1) * COSTCO_PAGE_SIZE < total) {
+      let env;
+      try {
+        env = await costcoGraphql(GET_ONLINE_ORDERS, {
+          startDate: costcoDateStr(windowStart),
+          endDate: costcoDateStr(windowEnd),
+          pageNumber: page,
+          pageSize: COSTCO_PAGE_SIZE,
+          warehouseNumber: String(warehouse),
+        });
+      } catch (err) {
+        return { ok: false, error: `getOnlineOrders: ${err.message}`, stored };
+      }
+      if (env?.errors?.length) {
+        return { ok: false, error: `getOnlineOrders: ${env.errors[0].message}`, stored };
+      }
+
+      const pageNode = env?.data?.getOnlineOrders?.[0];
+      total = Number.isFinite(pageNode?.totalNumberOfRecords) ? pageNode.totalNumberOfRecords : 0;
+
+      const { orders } = parseCostcoOnlineOrders(env);
+      if (orders.length === 0) break;
+
+      for (const order of orders) {
+        if (!newest) newest = { id: order.order_id, date: order.ordered_at };
+        if (stopId && order.order_id === stopId) {
+          reachedKnown = true;
+          break;
+        }
+        await enrichCostcoOrder(order);
+        await db.upsertOrder(order);
+        stored += 1;
+      }
+      if (reachedKnown) break;
+      page += 1;
+    }
+    windowEnd = windowStart; // older window next (overlap is harmless — upsert is idempotent)
+  }
+
+  if (newest) {
+    await db.setScanState('costco', {
+      last_scan_at: new Date().toISOString(),
+      latest_order_id_seen: newest.id,
+      latest_order_date_seen: newest.date,
+    });
+  }
+  return { ok: true, stored };
+}
+
 async function scanRetailer(retailer, mode) {
   const config = await loadConfig();
-  console.log('[sre] scan', retailer, mode, '— target.api_key present:', !!config.target?.api_key);
+  console.log('[sre] scan', retailer, mode);
   if (retailer === 'target') return scanTarget(mode, config);
-  if (retailer === 'costco') return { ok: false, error: 'Costco scan not implemented yet (step 6).' };
+  if (retailer === 'costco') return scanCostco(mode, config);
   return { ok: false, error: `Unknown retailer: ${retailer}` };
 }
 

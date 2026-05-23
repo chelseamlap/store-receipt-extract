@@ -65,7 +65,9 @@ Early scaffold. Build order (see project spec):
 5. ✅ Target scan (in the service worker) — order_history fetch + parse +
    incremental + order-detail enrichment (price, tax/fee totals, dpci category);
    verified end-to-end in Chrome
-6. ⬜ Costco scan (service worker) — GraphQL shapes captured (see endpoints.md); ready to build
+6. 🔶 Costco scan (service worker) — getOnlineOrders + getOrderDetails over
+   GraphQL, date-windowed pagination, incremental, PII-free queries; parser-tested.
+   Browser verification pending. (Costco online exposes no category → category_native null.)
 
 Note: scanning runs entirely in the service worker (ADR-008); there are no
 content scripts. `extension/content/common.js` is a shared parser/throttle lib.

@@ -200,3 +200,122 @@ export function mergeTargetDetail(order, detail) {
   order.raw_summary = parsed.raw_summary;
   return order;
 }
+
+// ---------------------------------------------------------------------------
+// Costco: getOnlineOrders -> storage records (no prices; those come from
+// getOrderDetails). Response is array-wrapped: data.getOnlineOrders[0].bcOrders.
+// We never request PII fields, but defensively drop emailAddress from raw.
+// ---------------------------------------------------------------------------
+
+export function parseCostcoOnlineOrders(envelope) {
+  const out = { orders: [], skipped: 0 };
+  const wrapper = envelope?.data?.getOnlineOrders;
+  const page = Array.isArray(wrapper) ? wrapper[0] : wrapper;
+  const bcOrders = page?.bcOrders;
+  if (!Array.isArray(bcOrders)) {
+    logUnexpectedShape('$.data.getOnlineOrders[0].bcOrders', undefined);
+    return out;
+  }
+
+  for (const o of bcOrders) {
+    const orderId = o?.orderNumber;
+    if (!orderId) {
+      logUnexpectedShape('$.bcOrders[].orderNumber', undefined);
+      out.skipped += 1;
+      continue;
+    }
+    const lines = Array.isArray(o.orderLineItems) ? o.orderLineItems : [];
+    const items = lines.map((li, i) => ({
+      line_index: i,
+      sku: li?.itemNumber != null ? String(li.itemNumber) : null,
+      name: li?.itemDescription ?? null,
+      quantity: toNumberOrNull(li?.quantity),
+      unit_price: null, // getOrderDetails fills these
+      line_total: null,
+      category_native: null, // Costco online exposes no category
+      dpci: null,
+      raw_item: li,
+    }));
+    const { emailAddress, ...rawSafe } = o; // drop the one PII field
+    void emailAddress;
+    out.orders.push({
+      retailer: 'costco',
+      order_id: String(orderId),
+      account_hint: null,
+      ordered_at: o.orderPlacedDate ?? null,
+      total: toNumberOrNull(o.orderTotal),
+      subtotal: null,
+      tax: null,
+      shipping: null,
+      fulfillment_type: null,
+      raw: rawSafe,
+      items,
+    });
+  }
+  return out;
+}
+
+// Parse getOrderDetails (data.getOrderDetails, possibly array). Line items are
+// nested under orderShipTos[] (aliased shipToAddress). Money-only — the query
+// requests no PII. Returns null on unexpected shape.
+export function parseCostcoOrderDetail(envelope) {
+  const node = envelope?.data?.getOrderDetails;
+  const d = Array.isArray(node) ? node[0] : node;
+  if (!d || typeof d !== 'object') {
+    logUnexpectedShape('$.data.getOrderDetails', undefined);
+    return null;
+  }
+
+  const items = [];
+  for (const ship of Array.isArray(d.shipToAddress) ? d.shipToAddress : []) {
+    for (const li of ship?.orderLineItems ?? []) {
+      const qty = toNumberOrNull(li?.quantity);
+      const unit = toNumberOrNull(li?.price);
+      items.push({
+        line_index: items.length,
+        sku: li?.itemNumber != null ? String(li.itemNumber) : null,
+        name: li?.itemDescription ?? null,
+        quantity: qty,
+        unit_price: unit,
+        line_total:
+          toNumberOrNull(li?.merchandiseTotalAmount) ??
+          (unit != null && qty != null ? +(unit * qty).toFixed(2) : null),
+        category_native: null,
+        dpci: null,
+        raw_item: li,
+      });
+    }
+  }
+
+  return {
+    totals: {
+      total: toNumberOrNull(d.orderTotal),
+      subtotal: toNumberOrNull(d.merchandiseTotal),
+      tax: toNumberOrNull(d.uSTaxTotal1),
+      shipping: toNumberOrNull(d.shippingAndHandling),
+    },
+    items,
+    raw_summary: {
+      merchandiseTotal: d.merchandiseTotal ?? null,
+      shippingAndHandling: d.shippingAndHandling ?? null,
+      retailDeliveryFee: d.retailDeliveryFee ?? null,
+      grocerySurcharge: d.grocerySurcharge ?? null,
+      frozenSurchargeFee: d.frozenSurchargeFee ?? null,
+      uSTaxTotal1: d.uSTaxTotal1 ?? null,
+      discountAmount: d.discountAmount ?? null,
+      orderTotal: d.orderTotal ?? null,
+    },
+  };
+}
+
+export function mergeCostcoDetail(order, detailEnvelope) {
+  const parsed = parseCostcoOrderDetail(detailEnvelope);
+  if (!parsed) return order;
+  order.total = parsed.totals.total ?? order.total;
+  order.subtotal = parsed.totals.subtotal ?? order.subtotal;
+  order.tax = parsed.totals.tax ?? order.tax;
+  order.shipping = parsed.totals.shipping ?? order.shipping;
+  if (parsed.items.length) order.items = parsed.items;
+  order.raw_summary = parsed.raw_summary;
+  return order;
+}
