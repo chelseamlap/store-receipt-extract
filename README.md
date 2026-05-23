@@ -60,7 +60,7 @@ Early scaffold. Build order (see project spec):
 
 1. ✅ Repo scaffold + docs
 2. ✅ IndexedDB wrapper + tests
-3. ⬜ Extension skeleton (manifest, popup, service worker)
-4. ⬜ Export (CSV / JSON)
+3. ✅ Extension skeleton (manifest, popup, service worker)
+4. ✅ Export (CSV / JSON) + tests
 5. ⬜ Target content script + enrichment
-6. ⬜ Costco content script — **paused** until GraphQL shapes are captured
+6. ⬜ Costco content script — GraphQL shapes captured (see endpoints.md); ready to build

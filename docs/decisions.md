@@ -35,6 +35,20 @@ captures and exports raw line + order data. The join against Simplifi's
 authoritative total and proportional allocation happens downstream (DuckDB /
 Sheets), out of scope here.
 
+## ADR-006 — Content scripts load shared code via dynamic import
+
+**Date:** 2026-05-22
+**Status:** Accepted
+
+No build step means no bundler to inline shared parser/throttle code. MV3
+content scripts can't use static `import` of other extension files, so the
+retailer content scripts (steps 5/6) will pull in `content/common.js` and
+`db.js` via `await import(chrome.runtime.getURL(...))`. Those files are listed
+in `web_accessible_resources` for the retailer hosts so the dynamic import
+resolves. Keeps `common.js` a real ES module that node tests can import
+directly. The service worker and popup use normal static `import` (extension
+pages allow it).
+
 ## ADR-005 — Endpoint reality vs. original spec (from HAR mining)
 
 **Date:** 2026-05-22
