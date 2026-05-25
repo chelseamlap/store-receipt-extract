@@ -119,8 +119,15 @@ retailer,order_channel,order_id,account_hint,ordered_at,total,subtotal,tax,shipp
 `order_items_<retailer>_<YYYYMMDD-HHMMSS>.csv`:
 
 ```
-retailer,order_channel,order_id,line_index,sku,name,quantity,unit_price,line_total,category_native,category_label
+retailer,order_channel,order_id,line_index,sku,name,quantity,unit_price,line_total,category_native,category_label,is_adjustment,adjustment_reason
 ```
+
+`is_adjustment` / `adjustment_reason` flag non-product lines (derived at export
+from the item name): `discount` (Costco warehouse instant-savings, named
+`/<itemNumber>`, negative line_total), `deposit` (bottle deposits), `fee`
+(e.g. delivery fee). Adjustments carry the same `category_native` as the line
+they relate to, so they net correctly within a category; filter on
+`is_adjustment` to separate products from savings/fees.
 
 `category_label` is a human label for `category_native`: Costco POS department
 codes are mapped via `extension/export/costco-departments.js` (best-effort,

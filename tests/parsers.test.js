@@ -16,6 +16,7 @@ import {
   parseCostcoReceiptList,
   parseCostcoReceiptDetail,
   channelFromCostcoReceiptType,
+  classifyAdjustment,
   TokenBucket,
 } from '../extension/content/common.js';
 
@@ -229,6 +230,16 @@ test('parseCostcoReceiptDetail normalizes a receipt, derives category from dept,
 test('parseCostcoReceiptDetail returns null on unexpected shape', () => {
   assert.equal(parseCostcoReceiptDetail({}), null);
   assert.equal(parseCostcoReceiptDetail({ data: { receiptsWithCounts: { receipts: [{}] } } }), null);
+});
+
+test('classifyAdjustment flags discounts, deposits, fees; passes products', () => {
+  assert.equal(classifyAdjustment('/1218715'), 'discount');
+  assert.equal(classifyAdjustment('/ GLASSES'), 'discount');
+  assert.equal(classifyAdjustment('VT BOTTLE DEPST EE/854342'), 'deposit');
+  assert.equal(classifyAdjustment('COLORADO DELIVERY FEE $.28'), 'fee');
+  assert.equal(classifyAdjustment('STARB FRENCH 1.13KG BEANS'), null);
+  assert.equal(classifyAdjustment('COFFEE 2LB'), null); // \bfee\b must not match "coffee"
+  assert.equal(classifyAdjustment(null), null);
 });
 
 test('TokenBucket gates the 3rd request in a 2-req/sec window', async () => {

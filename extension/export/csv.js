@@ -2,6 +2,7 @@
 // No third-party imports.
 
 import { costcoDepartmentLabel } from './costco-departments.js';
+import { classifyAdjustment } from '../content/common.js';
 
 const ORDER_COLUMNS = [
   'retailer',
@@ -29,6 +30,8 @@ const ITEM_COLUMNS = [
   'line_total',
   'category_native',
   'category_label',
+  'is_adjustment',
+  'adjustment_reason',
 ];
 
 // Human label for category_native: Costco dept codes -> names; otherwise the
@@ -92,6 +95,7 @@ export function serializeItemsCsv(orders, retailer) {
   const rows = [csvRow(ITEM_COLUMNS)];
   for (const o of filterByRetailer(orders, retailer)) {
     for (const item of o.items || []) {
+      const reason = classifyAdjustment(item.name);
       rows.push(
         csvRow([
           o.retailer,
@@ -105,6 +109,8 @@ export function serializeItemsCsv(orders, retailer) {
           item.line_total,
           safeText(item.category_native),
           safeText(categoryLabel(o.retailer, item.category_native)),
+          reason ? 'true' : 'false',
+          reason ?? '',
         ])
       );
     }

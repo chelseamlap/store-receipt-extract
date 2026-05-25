@@ -78,6 +78,19 @@ function toNumberOrNull(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+// Classify a line item as a non-product adjustment based on its name. Returns a
+// reason string or null (a normal product). Covers Costco warehouse instant
+// savings (names prefixed with "/<itemNumber>"), bottle deposits, and
+// delivery/other fees (e.g. Costco's "COLORADO DELIVERY FEE").
+export function classifyAdjustment(name) {
+  const s = String(name ?? '').trim();
+  if (!s) return null;
+  if (s.startsWith('/')) return 'discount';
+  if (/bottle\s*depst|deposit/i.test(s)) return 'deposit';
+  if (/\bfee\b/i.test(s)) return 'fee';
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Target: normalize one order_history page into storage records.
 // Returns { orders: [...normalized], skipped: n }. Pure — no I/O.
