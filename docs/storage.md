@@ -119,8 +119,14 @@ retailer,order_channel,order_id,account_hint,ordered_at,total,subtotal,tax,shipp
 `order_items_<retailer>_<YYYYMMDD-HHMMSS>.csv`:
 
 ```
-retailer,order_id,line_index,sku,name,quantity,unit_price,line_total,category_native
+retailer,order_channel,order_id,line_index,sku,name,quantity,unit_price,line_total,category_native,category_label
 ```
+
+`category_label` is a human label for `category_native`: Costco POS department
+codes are mapped via `extension/export/costco-departments.js` (best-effort,
+user-extended — unknown codes show `Dept <n>`); Target's dpci department code
+passes through unchanged. Labels are applied at export time, so editing the map
+and re-exporting updates them without re-scanning.
 
 ### JSON (one file)
 

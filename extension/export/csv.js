@@ -1,6 +1,7 @@
 // export/csv.js — pure serializers: orders + line items to RFC 4180 CSV.
-// String functions are unit-tested; the *Blob wrappers are thin conveniences
-// for the popup. No third-party imports.
+// No third-party imports.
+
+import { costcoDepartmentLabel } from './costco-departments.js';
 
 const ORDER_COLUMNS = [
   'retailer',
@@ -18,6 +19,7 @@ const ORDER_COLUMNS = [
 
 const ITEM_COLUMNS = [
   'retailer',
+  'order_channel',
   'order_id',
   'line_index',
   'sku',
@@ -26,7 +28,14 @@ const ITEM_COLUMNS = [
   'unit_price',
   'line_total',
   'category_native',
+  'category_label',
 ];
+
+// Human label for category_native: Costco dept codes -> names; otherwise the
+// raw value (Target's dpci department code) passes through.
+function categoryLabel(retailer, code) {
+  return retailer === 'costco' ? costcoDepartmentLabel(code) : code;
+}
 
 // RFC 4180: quote fields containing comma, quote, CR or LF; double embedded
 // quotes. null/undefined -> empty field.
@@ -86,6 +95,7 @@ export function serializeItemsCsv(orders, retailer) {
       rows.push(
         csvRow([
           o.retailer,
+          o.order_channel,
           o.order_id,
           item.line_index,
           item.sku,
@@ -94,6 +104,7 @@ export function serializeItemsCsv(orders, retailer) {
           item.unit_price,
           item.line_total,
           safeText(item.category_native),
+          safeText(categoryLabel(o.retailer, item.category_native)),
         ])
       );
     }

@@ -69,10 +69,36 @@ test('serializeOrdersCsv writes header, item_count, and blank for null', () => {
 test('serializeItemsCsv flattens items and quotes tricky fields', () => {
   const csv = serializeItemsCsv(sampleOrders());
   const lines = csv.trimEnd().split('\r\n');
-  assert.equal(lines[0], 'retailer,order_id,line_index,sku,name,quantity,unit_price,line_total,category_native');
+  assert.equal(lines[0], 'retailer,order_channel,order_id,line_index,sku,name,quantity,unit_price,line_total,category_native,category_label');
   assert.equal(lines.length, 1 + 3, 'header + 3 item rows');
   assert.ok(csv.includes('"Paper Towels, 6 ""Mega"" Rolls"'));
   assert.ok(csv.includes('"Eggs, 24 ct\nlarge"'));
+});
+
+test('items CSV includes order_channel and a Costco department label', () => {
+  const orders = [
+    {
+      retailer: 'costco',
+      order_channel: 'in_warehouse',
+      order_id: 'W-1',
+      items: [
+        { line_index: 0, sku: '1', name: 'VET RX', quantity: 1, unit_price: 9, line_total: 9, category_native: '92' },
+        { line_index: 1, sku: '2', name: 'Mystery', quantity: 1, unit_price: 3, line_total: 3, category_native: '777' },
+      ],
+    },
+  ];
+  const lines = serializeItemsCsv(orders).trimEnd().split('\r\n');
+  assert.ok(lines[1].startsWith('costco,in_warehouse,W-1,'), 'channel present on item rows');
+  assert.ok(lines[1].endsWith(',92,Pharmacy'), 'known dept mapped to name');
+  assert.ok(lines[2].endsWith(',777,Dept 777'), 'unknown dept falls back to Dept N');
+});
+
+test('Target category_label passes the dpci code through (no Costco map)', () => {
+  const orders = [
+    { retailer: 'target', order_channel: 'online', order_id: 'T-1', items: [{ line_index: 0, sku: 't', name: 'x', category_native: '037' }] },
+  ];
+  const row = serializeItemsCsv(orders).trimEnd().split('\r\n')[1];
+  assert.ok(row.endsWith(',037,037'), 'target dpci code passes through as label');
 });
 
 test('items CSV guards formula injection in text but not numeric fields', () => {
