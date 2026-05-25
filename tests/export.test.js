@@ -15,6 +15,7 @@ function sampleOrders() {
     {
       retailer: 'target',
       order_id: '900000000000001',
+      order_channel: 'online',
       account_hint: 'me@example.com',
       ordered_at: '2025-10-14T14:26:16-05:00',
       total: 58.78,
@@ -30,6 +31,7 @@ function sampleOrders() {
     {
       retailer: 'costco',
       order_id: 'C-1',
+      order_channel: 'in_warehouse',
       account_hint: null,
       ordered_at: '2026-04-02T10:15:00Z',
       total: 142.37,
@@ -57,11 +59,11 @@ test('csvField escapes commas, quotes, and newlines per RFC 4180', () => {
 test('serializeOrdersCsv writes header, item_count, and blank for null', () => {
   const csv = serializeOrdersCsv(sampleOrders());
   const lines = csv.trimEnd().split('\r\n');
-  assert.equal(lines[0], 'retailer,order_id,account_hint,ordered_at,total,subtotal,tax,shipping,fulfillment_type,item_count');
-  assert.ok(lines[1].startsWith('target,900000000000001,me@example.com,'));
+  assert.equal(lines[0], 'retailer,order_channel,order_id,account_hint,ordered_at,total,subtotal,tax,shipping,fulfillment_type,item_count');
+  assert.ok(lines[1].startsWith('target,online,900000000000001,me@example.com,'));
   assert.ok(lines[1].endsWith(',ShipToHome,2'), 'item_count = 2');
-  // costco row: nulls become empty fields
-  assert.ok(lines[2].includes('costco,C-1,,'));
+  // costco row
+  assert.ok(lines[2].startsWith('costco,in_warehouse,C-1,,'));
 });
 
 test('serializeItemsCsv flattens items and quotes tricky fields', () => {

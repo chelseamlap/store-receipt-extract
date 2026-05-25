@@ -4,6 +4,7 @@
 
 const ORDER_COLUMNS = [
   'retailer',
+  'order_channel',
   'order_id',
   'account_hint',
   'ordered_at',
@@ -62,6 +63,7 @@ export function serializeOrdersCsv(orders, retailer) {
     rows.push(
       csvRow([
         o.retailer,
+        o.order_channel,
         o.order_id,
         safeText(o.account_hint),
         o.ordered_at,

@@ -35,6 +35,27 @@ captures and exports raw line + order data. The join against Simplifi's
 authoritative total and proportional allocation happens downstream (DuckDB /
 Sheets), out of scope here.
 
+## ADR-011 — In-person receipts + order_channel
+
+**Date:** 2026-05-24
+**Status:** Accepted (Costco in-warehouse/gas/car-wash done; Target in-store next)
+
+Online-only data isn't useful when much spend is in person. Added an
+`order_channel` field (`online` | `in_store` | `in_warehouse` | `gas` |
+`carwash`) to every order record + the orders CSV, so in-person vs online spend
+is separable downstream. `order_id` is the order_number / store_receipt_id /
+transactionBarcode depending on channel.
+
+**Costco in-warehouse/gas/car-wash** (`receiptsWithCounts`): list mode (date
+window, `M/DD/YYYY` format, documentType `all`) → barcodes → barcode mode →
+full receipt. The Costco scan now runs this after the online flow.
+`itemDepartmentNumber` becomes `category_native` — the only category Costco
+actually exposes (online has none). `membershipNumber` is stripped.
+Incremental skips barcodes already stored (order-independent; no cursor), so it
+stays correct without relying on result ordering. Detail `documentType` is
+derived from the receipt type (`warehouse`/`gas`/`carwash`); gas/car-wash values
+are unverified (none in the capture) and fail non-fatally.
+
 ## ADR-010 — Review hardening: PII strip + resumable full scans
 
 **Date:** 2026-05-24

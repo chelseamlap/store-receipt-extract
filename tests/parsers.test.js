@@ -13,6 +13,9 @@ import {
   parseCostcoOnlineOrders,
   parseCostcoOrderDetail,
   mergeCostcoDetail,
+  parseCostcoReceiptList,
+  parseCostcoReceiptDetail,
+  channelFromCostcoReceiptType,
   TokenBucket,
 } from '../extension/content/common.js';
 
@@ -24,6 +27,9 @@ const targetDetailFixture = JSON.parse(
 );
 const costcoFixture = JSON.parse(
   readFileSync(fileURLToPath(new URL('./fixtures/costco_order_sample.json', import.meta.url)), 'utf8')
+);
+const costcoReceiptFixture = JSON.parse(
+  readFileSync(fileURLToPath(new URL('./fixtures/costco_receipt_sample.json', import.meta.url)), 'utf8')
 );
 
 test('parseTargetOrderHistory normalizes the confirmed shape', () => {
@@ -160,6 +166,50 @@ test('mergeCostcoDetail makes detail authoritative and keeps it PII-free', () =>
   assert.equal(order.items[0].category_native, null); // Costco online: no category
   assert.equal(order.raw_summary.merchandiseTotal, 130.0);
   assert.ok(!JSON.stringify(order).includes('emailAddress'));
+});
+
+test('channelFromCostcoReceiptType maps receipt types to channels', () => {
+  assert.equal(channelFromCostcoReceiptType('In-Warehouse'), 'in_warehouse');
+  assert.equal(channelFromCostcoReceiptType('Gas Station'), 'gas');
+  assert.equal(channelFromCostcoReceiptType('Car Wash'), 'carwash');
+  assert.equal(channelFromCostcoReceiptType(null), 'in_warehouse');
+});
+
+test('parseCostcoReceiptList returns barcodes + receipt types', () => {
+  const list = parseCostcoReceiptList(costcoReceiptFixture.list);
+  assert.equal(list.length, 2);
+  assert.deepEqual(
+    list.map((r) => [r.barcode, r.receiptType]),
+    [
+      ['21044300000000000000001', 'In-Warehouse'],
+      ['21044300000000000000002', 'Gas Station'],
+    ]
+  );
+  assert.deepEqual(parseCostcoReceiptList({}), []);
+});
+
+test('parseCostcoReceiptDetail normalizes a receipt, derives category from dept, strips membership', () => {
+  const rec = parseCostcoReceiptDetail(costcoReceiptFixture.detail);
+  assert.equal(rec.retailer, 'costco');
+  assert.equal(rec.order_channel, 'in_warehouse');
+  assert.equal(rec.order_id, '21044300000000000000001');
+  assert.equal(rec.total, 26.78);
+  assert.equal(rec.subtotal, 26.78);
+  assert.equal(rec.tax, 0);
+  assert.equal(rec.items.length, 2);
+  assert.deepEqual(
+    rec.items.map((i) => [i.sku, i.name, i.line_total, i.category_native]),
+    [
+      ['929092', 'KS PAPER TWL', 19.99, '14'],
+      ['111111', 'ORGANIC EGGS', 6.79, '24'],
+    ]
+  );
+  assert.ok(!JSON.stringify(rec).includes('membershipNumber'), 'membership stripped from raw');
+});
+
+test('parseCostcoReceiptDetail returns null on unexpected shape', () => {
+  assert.equal(parseCostcoReceiptDetail({}), null);
+  assert.equal(parseCostcoReceiptDetail({ data: { receiptsWithCounts: { receipts: [{}] } } }), null);
 });
 
 test('TokenBucket gates the 3rd request in a 2-req/sec window', async () => {

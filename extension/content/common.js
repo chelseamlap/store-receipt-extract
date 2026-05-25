@@ -117,6 +117,7 @@ export function parseTargetOrderHistory(envelope) {
     out.orders.push({
       retailer: 'target',
       order_id: String(orderId),
+      order_channel: 'online',
       account_hint: null,
       ordered_at: order.placed_date ?? null,
       total: toNumberOrNull(order?.summary?.grand_total),
@@ -244,6 +245,7 @@ export function parseCostcoOnlineOrders(envelope) {
     out.orders.push({
       retailer: 'costco',
       order_id: String(orderId),
+      order_channel: 'online',
       account_hint: null,
       ordered_at: o.orderPlacedDate ?? null,
       total: toNumberOrNull(o.orderTotal),
@@ -256,6 +258,77 @@ export function parseCostcoOnlineOrders(envelope) {
     });
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Costco in-warehouse / gas / car-wash receipts (receiptsWithCounts).
+// List mode returns barcodes; barcode mode returns the full receipt. The
+// line items carry itemDepartmentNumber — Costco's POS department code, which
+// we use as category_native (the one category source Costco actually exposes).
+// ---------------------------------------------------------------------------
+
+export function channelFromCostcoReceiptType(receiptType) {
+  const s = String(receiptType ?? '').toLowerCase();
+  if (s.includes('gas')) return 'gas';
+  if (s.includes('wash')) return 'carwash';
+  return 'in_warehouse';
+}
+
+// List mode -> [{ barcode, receiptType, date }]. Pure.
+export function parseCostcoReceiptList(envelope) {
+  const receipts = envelope?.data?.receiptsWithCounts?.receipts;
+  if (!Array.isArray(receipts)) {
+    logUnexpectedShape('$.data.receiptsWithCounts.receipts', undefined);
+    return [];
+  }
+  return receipts
+    .filter((r) => r?.transactionBarcode)
+    .map((r) => ({
+      barcode: String(r.transactionBarcode),
+      receiptType: r.receiptType ?? null,
+      date: r.transactionDateTime ?? r.transactionDate ?? null,
+    }));
+}
+
+// Barcode mode -> one normalized order record (or null). Strips membershipNumber.
+export function parseCostcoReceiptDetail(envelope) {
+  const receipts = envelope?.data?.receiptsWithCounts?.receipts;
+  const r = Array.isArray(receipts) ? receipts[0] : receipts;
+  if (!r || !r.transactionBarcode) {
+    logUnexpectedShape('$.data.receiptsWithCounts.receipts[0]', undefined);
+    return null;
+  }
+
+  const lines = Array.isArray(r.itemArray) ? r.itemArray : [];
+  const items = lines.map((it, i) => ({
+    line_index: i,
+    sku: it?.itemNumber != null ? String(it.itemNumber) : null,
+    name: [it?.itemDescription01, it?.itemDescription02].filter(Boolean).join(' ').trim() || null,
+    quantity: toNumberOrNull(it?.unit),
+    unit_price: toNumberOrNull(it?.itemUnitPriceAmount),
+    line_total: toNumberOrNull(it?.amount),
+    // Costco POS department code — first real category source for Costco.
+    category_native: it?.itemDepartmentNumber != null ? String(it.itemDepartmentNumber) : null,
+    dpci: null,
+    raw_item: it,
+  }));
+
+  const { membershipNumber, ...rawSafe } = r; // drop PII
+  void membershipNumber;
+  return {
+    retailer: 'costco',
+    order_id: String(r.transactionBarcode),
+    order_channel: channelFromCostcoReceiptType(r.receiptType),
+    account_hint: null,
+    ordered_at: r.transactionDateTime ?? r.transactionDate ?? null,
+    total: toNumberOrNull(r.total),
+    subtotal: toNumberOrNull(r.subTotal),
+    tax: toNumberOrNull(r.taxes),
+    shipping: null,
+    fulfillment_type: null,
+    raw: rawSafe,
+    items,
+  };
 }
 
 // Parse getOrderDetails (data.getOrderDetails, possibly array). Line items are

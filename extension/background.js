@@ -10,6 +10,9 @@ import {
   mergeTargetDetail,
   parseCostcoOnlineOrders,
   mergeCostcoDetail,
+  parseCostcoReceiptList,
+  parseCostcoReceiptDetail,
+  channelFromCostcoReceiptType,
   throttledFetchJson,
 } from './content/common.js';
 
@@ -249,6 +252,92 @@ function costcoDateStr(d) {
   return `${d.getFullYear()}-${d.getMonth() + 1}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// receiptsWithCounts uses a DIFFERENT format: M/DD/YYYY (e.g. 3/01/2026).
+function costcoReceiptDateStr(d) {
+  return `${d.getMonth() + 1}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+}
+
+function docTypeForChannel(channel) {
+  if (channel === 'gas') return 'gas';
+  if (channel === 'carwash') return 'carwash';
+  return 'warehouse';
+}
+
+// In-warehouse / gas / car-wash receipts. List mode returns barcodes for a date
+// range; barcode mode returns the full receipt (line items + dept codes). PII
+// fields are not requested.
+const RECEIPTS_LIST = `query receiptsWithCounts($startDate:String!,$endDate:String!,$documentType:String!,$documentSubType:String!){
+  receiptsWithCounts(startDate:$startDate,endDate:$endDate,documentType:$documentType,documentSubType:$documentSubType){
+    inWarehouse gasStation carWash gasAndCarWash
+    receipts{ warehouseName receiptType documentType transactionDateTime transactionBarcode transactionType total totalItemCount }
+  }
+}`;
+
+const RECEIPTS_DETAIL = `query receiptsWithCounts($barcode:String!,$documentType:String!){
+  receiptsWithCounts(barcode:$barcode,documentType:$documentType){
+    receipts{
+      receiptType documentType transactionDateTime transactionDate transactionBarcode warehouseNumber warehouseName
+      total subTotal taxes instantSavings totalItemCount
+      itemArray{ itemNumber itemDescription01 itemDescription02 itemDepartmentNumber unit amount itemUnitPriceAmount taxFlag fuelGradeDescription fuelUnitQuantity }
+    }
+  }
+}`;
+
+// Pull in-warehouse/gas/car-wash receipts over the lookback window. Incremental
+// skips barcodes already stored (order-independent; no cursor needed). Returns
+// the count stored. Non-fatal per receipt.
+async function scanCostcoReceipts(mode) {
+  const today = new Date();
+  const minDate = new Date(today.getTime() - COSTCO_LOOKBACK_DAYS * DAY_MS);
+  let windowEnd = new Date(today);
+  let stored = 0;
+
+  while (windowEnd > minDate) {
+    const windowStart = new Date(Math.max(windowEnd.getTime() - COSTCO_WINDOW_DAYS * DAY_MS, minDate.getTime()));
+    let listEnv;
+    try {
+      listEnv = await costcoGraphql(RECEIPTS_LIST, {
+        startDate: costcoReceiptDateStr(windowStart),
+        endDate: costcoReceiptDateStr(windowEnd),
+        documentType: 'all',
+        documentSubType: 'all',
+      });
+    } catch (err) {
+      console.warn('[sre] receipts list failed:', err.message);
+      break;
+    }
+    if (listEnv?.errors?.length) {
+      console.warn('[sre] receipts list errors:', listEnv.errors[0].message);
+      break;
+    }
+
+    for (const r of parseCostcoReceiptList(listEnv)) {
+      if (mode !== 'full' && (await db.getOrder('costco', r.barcode))) continue;
+      let detailEnv;
+      try {
+        detailEnv = await costcoGraphql(RECEIPTS_DETAIL, {
+          barcode: r.barcode,
+          documentType: docTypeForChannel(channelFromCostcoReceiptType(r.receiptType)),
+        });
+      } catch (err) {
+        console.warn('[sre] receipt detail failed', r.barcode, err.message);
+        continue;
+      }
+      if (detailEnv?.errors?.length) {
+        console.warn('[sre] receipt detail errors', r.barcode, detailEnv.errors[0].message);
+        continue;
+      }
+      const rec = parseCostcoReceiptDetail(detailEnv);
+      if (rec) {
+        await db.upsertOrder(rec);
+        stored += 1;
+      }
+    }
+    windowEnd = windowStart;
+  }
+  return stored;
+}
+
 async function costcoGraphql(query, variables) {
   const auth = await getCostcoAuth();
   if (!auth?.headers) {
@@ -374,7 +463,15 @@ async function scanCostco(mode, config) {
   }
 
   await finishScan('costco', scanState, newest);
-  return { ok: true, stored };
+
+  // Also pull in-warehouse / gas / car-wash receipts (separate API, same auth).
+  let receiptsStored = 0;
+  try {
+    receiptsStored = await scanCostcoReceipts(mode);
+  } catch (err) {
+    console.warn('[sre] costco receipts scan failed:', err.message);
+  }
+  return { ok: true, stored: stored + receiptsStored };
 }
 
 async function scanRetailer(retailer, mode) {

@@ -82,5 +82,14 @@ Early scaffold. Build order (see project spec):
    queries; verified end-to-end in Chrome (names + prices export correctly).
    (Costco online exposes no category → category_native null.)
 
+**In-person receipts** (post-v1, ADR-011):
+- 🔶 Costco in-warehouse / gas / car-wash (`receiptsWithCounts`) — built; pulled
+  by the Costco scan; `itemDepartmentNumber` → `category_native`. Browser
+  verification pending.
+- ⬜ Target in-store (`order_purchase_type=STORE` + `/store` detail) — next.
+
+Every order carries an `order_channel` (`online` / `in_store` / `in_warehouse` /
+`gas` / `carwash`) so in-person vs online spend separates downstream.
+
 Note: scanning runs entirely in the service worker (ADR-008); there are no
 content scripts. `extension/content/common.js` is a shared parser/throttle lib.

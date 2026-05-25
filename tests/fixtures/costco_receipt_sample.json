@@ -1,0 +1,79 @@
+{
+  "_note": "SANITIZED Costco receiptsWithCounts samples (fake values), matching the confirmed HAR shapes. Detail includes membershipNumber ON PURPOSE to verify the parser strips it. itemDepartmentNumber is the category source.",
+  "list": {
+    "data": {
+      "receiptsWithCounts": {
+        "inWarehouse": 1,
+        "gasStation": 1,
+        "carWash": 0,
+        "gasAndCarWash": 0,
+        "receipts": [
+          {
+            "warehouseName": "SW DENVER",
+            "receiptType": "In-Warehouse",
+            "documentType": "WarehouseReceiptDetail",
+            "transactionDateTime": "2026-05-06T17:41:00",
+            "transactionBarcode": "21044300000000000000001",
+            "transactionType": "Sales",
+            "total": 26.78,
+            "totalItemCount": 2
+          },
+          {
+            "warehouseName": "SW DENVER GAS",
+            "receiptType": "Gas Station",
+            "documentType": "GasReceiptDetail",
+            "transactionDateTime": "2026-05-10T08:02:00",
+            "transactionBarcode": "21044300000000000000002",
+            "transactionType": "Sales",
+            "total": 48.0,
+            "totalItemCount": 1
+          }
+        ]
+      }
+    }
+  },
+  "detail": {
+    "data": {
+      "receiptsWithCounts": {
+        "receipts": [
+          {
+            "receiptType": "In-Warehouse",
+            "documentType": "WarehouseReceiptDetail",
+            "transactionDateTime": "2026-05-06T17:41:00",
+            "transactionDate": "2026-05-06",
+            "transactionBarcode": "21044300000000000000001",
+            "warehouseNumber": 443,
+            "warehouseName": "SW DENVER",
+            "total": 26.78,
+            "subTotal": 26.78,
+            "taxes": 0,
+            "instantSavings": 0,
+            "totalItemCount": 2,
+            "membershipNumber": "REDACTED",
+            "itemArray": [
+              {
+                "itemNumber": "929092",
+                "itemDescription01": "KS PAPER TWL",
+                "itemDescription02": "",
+                "itemDepartmentNumber": 14,
+                "unit": 1,
+                "amount": 19.99,
+                "itemUnitPriceAmount": 19.99,
+                "taxFlag": "N"
+              },
+              {
+                "itemNumber": "111111",
+                "itemDescription01": "ORGANIC EGGS",
+                "itemDepartmentNumber": 24,
+                "unit": 1,
+                "amount": 6.79,
+                "itemUnitPriceAmount": 6.79,
+                "taxFlag": "N"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

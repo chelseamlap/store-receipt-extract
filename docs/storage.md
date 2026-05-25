@@ -16,7 +16,8 @@ Record shape:
 ```js
 {
   retailer: "target" | "costco",
-  order_id: "912002895833290",
+  order_id: "912002895833290",            // order_number | store_receipt_id | transactionBarcode
+  order_channel: "online",                // online | in_store | in_warehouse | gas | carwash
   account_hint: "chelsea@example.com",   // optional, for multi-account households
   ordered_at: "2025-10-14T14:26:16-05:00",
   total: 58.78,
@@ -112,7 +113,7 @@ doubled.
 `orders_<retailer>_<YYYYMMDD-HHMMSS>.csv`:
 
 ```
-retailer,order_id,account_hint,ordered_at,total,subtotal,tax,shipping,fulfillment_type,item_count
+retailer,order_channel,order_id,account_hint,ordered_at,total,subtotal,tax,shipping,fulfillment_type,item_count
 ```
 
 `order_items_<retailer>_<YYYYMMDD-HHMMSS>.csv`:
