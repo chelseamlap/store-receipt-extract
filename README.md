@@ -67,7 +67,11 @@ fixtures live in the repo.
 
 ## Status
 
-Early scaffold. Build order (see project spec):
+**Cold-starting? See [docs/PICKUP.md](docs/PICKUP.md)** for current state, setup
+gotchas, and the decision menu for what's next. Downstream analysis recipe:
+[docs/analysis.md](docs/analysis.md).
+
+Build order (see project spec):
 
 1. ✅ Repo scaffold + docs
 2. ✅ IndexedDB wrapper + tests
