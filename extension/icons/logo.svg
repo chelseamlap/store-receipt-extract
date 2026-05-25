@@ -1,0 +1,167 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" fill="none">
+  <defs>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3.5"/>
+      <feOffset dx="2" dy="5" result="offsetblur"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.22"/></feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="tagShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+      <feOffset dx="1.5" dy="3" result="offsetblur"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.28"/></feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- ============ RECEIPT ============ -->
+  <g transform="rotate(-6 256 256)" filter="url(#softShadow)" font-family="ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace">
+
+    <!-- Receipt body: rounded top, zigzag bottom -->
+    <path d="M 142 80
+             Q 142 76 146 76
+             L 366 76
+             Q 370 76 370 80
+             L 370 416
+             L 358 432 L 346 416 L 334 432 L 322 416 L 310 432 L 298 416 L 286 432 L 274 416 L 262 432 L 250 416 L 238 432 L 226 416 L 214 432 L 202 416 L 190 432 L 178 416 L 166 432 L 154 416 L 142 432
+             Z"
+          fill="#FBF6E9"
+          stroke="#C9B98A"
+          stroke-width="1.5"
+          stroke-linejoin="round"/>
+
+    <!-- Tiny perforation dots near top edge -->
+    <g fill="#C9B98A">
+      <circle cx="156" cy="86" r="1"/>
+      <circle cx="170" cy="86" r="1"/>
+      <circle cx="184" cy="86" r="1"/>
+      <circle cx="328" cy="86" r="1"/>
+      <circle cx="342" cy="86" r="1"/>
+      <circle cx="356" cy="86" r="1"/>
+    </g>
+
+    <!-- Header: EXTRACT MART -->
+    <text x="256" y="118"
+          text-anchor="middle"
+          fill="#1A1A1A"
+          font-size="20"
+          font-weight="900"
+          letter-spacing="2.5">— EXTRACT MART —</text>
+
+    <text x="256" y="138"
+          text-anchor="middle"
+          fill="#6B5E3F"
+          font-size="9.5"
+          letter-spacing="1.5">where DID it all go?</text>
+
+    <!-- Thin double rule -->
+    <line x1="156" y1="152" x2="356" y2="152" stroke="#1A1A1A" stroke-width="1"/>
+    <line x1="156" y1="156" x2="356" y2="156" stroke="#1A1A1A" stroke-width="1"/>
+
+    <!-- Date / receipt no -->
+    <text x="156" y="174" fill="#1A1A1A" font-size="10" font-weight="600">05·24·26</text>
+    <text x="356" y="174" text-anchor="end" fill="#1A1A1A" font-size="10" font-weight="600">#000001</text>
+
+    <!-- Line items: item label rect + price -->
+    <g fill="#1A1A1A" font-size="11" font-weight="600">
+      <rect x="156" y="194" width="105" height="9" rx="1.5" fill="#1A1A1A" opacity="0.78"/>
+      <text x="356" y="203" text-anchor="end">24.99</text>
+
+      <rect x="156" y="216" width="130" height="9" rx="1.5" fill="#1A1A1A" opacity="0.78"/>
+      <text x="356" y="225" text-anchor="end">12.50</text>
+
+      <rect x="156" y="238" width="88" height="9" rx="1.5" fill="#1A1A1A" opacity="0.78"/>
+      <text x="356" y="247" text-anchor="end">08.75</text>
+
+      <rect x="156" y="260" width="118" height="9" rx="1.5" fill="#1A1A1A" opacity="0.78"/>
+      <text x="356" y="269" text-anchor="end">45.00</text>
+
+      <rect x="156" y="282" width="76" height="9" rx="1.5" fill="#1A1A1A" opacity="0.78"/>
+      <text x="356" y="291" text-anchor="end">03.25</text>
+    </g>
+
+    <!-- Dashed divider -->
+    <line x1="156" y1="308" x2="356" y2="308" stroke="#1A1A1A" stroke-width="1.2" stroke-dasharray="3 3"/>
+
+    <!-- SUBTOTAL row -->
+    <text x="156" y="328" fill="#1A1A1A" font-size="11" font-weight="600">SUBTOTAL</text>
+    <text x="356" y="328" text-anchor="end" fill="#1A1A1A" font-size="11" font-weight="600">??.??</text>
+
+    <text x="156" y="346" fill="#1A1A1A" font-size="11" font-weight="600">TAX</text>
+    <text x="356" y="346" text-anchor="end" fill="#1A1A1A" font-size="11" font-weight="600">??.??</text>
+
+    <!-- Double rule before total -->
+    <line x1="156" y1="357" x2="356" y2="357" stroke="#1A1A1A" stroke-width="1"/>
+    <line x1="156" y1="361" x2="356" y2="361" stroke="#1A1A1A" stroke-width="1"/>
+
+    <!-- TOTAL: the punchline -->
+    <text x="156" y="384" fill="#1A1A1A" font-size="18" font-weight="900" letter-spacing="1">TOTAL</text>
+    <text x="356" y="384" text-anchor="end" fill="#1A1A1A" font-size="18" font-weight="900">$??.??</text>
+
+    <!-- Mini barcode at bottom -->
+    <g fill="#1A1A1A">
+      <rect x="206" y="396" width="1.5" height="12"/>
+      <rect x="210" y="396" width="3" height="12"/>
+      <rect x="215" y="396" width="1" height="12"/>
+      <rect x="218" y="396" width="2" height="12"/>
+      <rect x="223" y="396" width="1.5" height="12"/>
+      <rect x="227" y="396" width="3.5" height="12"/>
+      <rect x="233" y="396" width="1" height="12"/>
+      <rect x="236" y="396" width="2.5" height="12"/>
+      <rect x="241" y="396" width="1.5" height="12"/>
+      <rect x="245" y="396" width="1" height="12"/>
+      <rect x="248" y="396" width="3" height="12"/>
+      <rect x="253" y="396" width="1.5" height="12"/>
+      <rect x="257" y="396" width="2" height="12"/>
+      <rect x="262" y="396" width="1" height="12"/>
+      <rect x="265" y="396" width="3" height="12"/>
+      <rect x="271" y="396" width="1.5" height="12"/>
+      <rect x="275" y="396" width="2.5" height="12"/>
+      <rect x="280" y="396" width="1" height="12"/>
+      <rect x="283" y="396" width="3" height="12"/>
+      <rect x="289" y="396" width="1.5" height="12"/>
+      <rect x="293" y="396" width="2" height="12"/>
+      <rect x="298" y="396" width="1" height="12"/>
+      <rect x="301" y="396" width="3" height="12"/>
+    </g>
+
+  </g>
+
+  <!-- ============ CATEGORY TAGS (emerging from receipt right side) ============ -->
+  <!-- Each is a classic price-tag shape with a hole, slightly rotated, getting categorized -->
+
+  <!-- GROCERY (coral red) -->
+  <g transform="translate(366 168) rotate(11)" filter="url(#tagShadow)" font-family="ui-monospace, 'JetBrains Mono', Menlo, monospace">
+    <path d="M 0 0 L 92 0 L 110 17 L 92 34 L 0 34 Z" fill="#E85D55"/>
+    <circle cx="96" cy="17" r="3.5" fill="#FBF6E9"/>
+    <text x="46" y="23" text-anchor="middle" fill="#FBF6E9" font-size="13" font-weight="900" letter-spacing="1.2">GROCERY</text>
+  </g>
+
+  <!-- BOOZE (mustard gold) -->
+  <g transform="translate(378 220) rotate(-5)" filter="url(#tagShadow)" font-family="ui-monospace, 'JetBrains Mono', Menlo, monospace">
+    <path d="M 0 0 L 68 0 L 86 17 L 68 34 L 0 34 Z" fill="#D4A82A"/>
+    <circle cx="72" cy="17" r="3.5" fill="#FBF6E9"/>
+    <text x="34" y="23" text-anchor="middle" fill="#FBF6E9" font-size="13" font-weight="900" letter-spacing="1.2">BOOZE</text>
+  </g>
+
+  <!-- HOME (deep violet) -->
+  <g transform="translate(372 276) rotate(9)" filter="url(#tagShadow)" font-family="ui-monospace, 'JetBrains Mono', Menlo, monospace">
+    <path d="M 0 0 L 64 0 L 82 17 L 64 34 L 0 34 Z" fill="#7C5CD3"/>
+    <circle cx="68" cy="17" r="3.5" fill="#FBF6E9"/>
+    <text x="32" y="23" text-anchor="middle" fill="#FBF6E9" font-size="13" font-weight="900" letter-spacing="1.2">HOME</text>
+  </g>
+
+  <!-- FUN (teal jade) -->
+  <g transform="translate(386 332) rotate(-3)" filter="url(#tagShadow)" font-family="ui-monospace, 'JetBrains Mono', Menlo, monospace">
+    <path d="M 0 0 L 54 0 L 72 17 L 54 34 L 0 34 Z" fill="#2E9D8F"/>
+    <circle cx="58" cy="17" r="3.5" fill="#FBF6E9"/>
+    <text x="27" y="23" text-anchor="middle" fill="#FBF6E9" font-size="13" font-weight="900" letter-spacing="1.2">FUN</text>
+  </g>
+
+</svg>

@@ -7,7 +7,9 @@
     <style>
       :root { color-scheme: light dark; }
       body { font: 13px/1.4 system-ui, sans-serif; width: 320px; margin: 0; padding: 12px; }
-      h1 { font-size: 14px; margin: 0 0 10px; }
+      .brand { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
+      .brand img { width: 32px; height: 32px; flex: none; }
+      h1 { font-size: 14px; margin: 0; }
       .retailer { border: 1px solid color-mix(in srgb, currentColor 20%, transparent); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
       .retailer h2 { font-size: 13px; margin: 0 0 6px; text-transform: capitalize; }
       .stats { font-size: 12px; opacity: 0.85; margin: 4px 0 8px; }
@@ -20,7 +22,10 @@
     </style>
   </head>
   <body>
-    <h1>store-receipt-extract</h1>
+    <div class="brand">
+      <img src="../icons/logo.svg" alt="" />
+      <h1>store-receipt-extract</h1>
+    </div>
 
     <section class="retailer" data-retailer="target">
       <h2>Target</h2>
