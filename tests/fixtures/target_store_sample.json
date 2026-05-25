@@ -1,0 +1,22 @@
+{
+  "_note": "SANITIZED Target in-store order_history (order_purchase_type=STORE), fake values. Keyed by store_receipt_id, order_type STORES. address present ON PURPOSE to verify the parser strips it.",
+  "metadata": {},
+  "total_orders": 1,
+  "total_pages": 1,
+  "orders": [
+    {
+      "placed_date": "2026-05-16T15:18:06-05:00",
+      "order_type": "STORES",
+      "order_purchase_type": "STORE",
+      "store_receipt_id": "6136-0000-0000-0000",
+      "store_id": "0000",
+      "summary": { "grand_total": "32.40" },
+      "address": [
+        { "first_name": "REDACTED", "address_line1": "REDACTED", "city": "REDACTED", "state": "CO", "type": "STORE", "store_id": "0000" }
+      ],
+      "order_lines": [
+        { "line_number": 1, "original_quantity": 1, "item": { "tcin": "94886701", "description": "Women's Neida Sandals" } }
+      ]
+    }
+  ]
+}

@@ -92,12 +92,14 @@ export function parseTargetOrderHistory(envelope) {
   }
 
   for (const order of orders) {
-    const orderId = order?.order_number;
+    // Online orders are keyed by order_number; in-store by store_receipt_id.
+    const orderId = order?.order_number ?? order?.store_receipt_id;
     if (!orderId) {
-      logUnexpectedShape('$.orders[].order_number', order?.order_number);
+      logUnexpectedShape('$.orders[].order_number|store_receipt_id', undefined);
       out.skipped += 1;
       continue;
     }
+    const channel = order?.order_number ? 'online' : 'in_store';
 
     const lines = Array.isArray(order.order_lines) ? order.order_lines : [];
     const items = lines.map((line, i) => ({
@@ -117,7 +119,7 @@ export function parseTargetOrderHistory(envelope) {
     out.orders.push({
       retailer: 'target',
       order_id: String(orderId),
-      order_channel: 'online',
+      order_channel: channel,
       account_hint: null,
       ordered_at: order.placed_date ?? null,
       total: toNumberOrNull(order?.summary?.grand_total),

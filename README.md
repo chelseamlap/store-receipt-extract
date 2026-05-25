@@ -83,10 +83,11 @@ Early scaffold. Build order (see project spec):
    (Costco online exposes no category → category_native null.)
 
 **In-person receipts** (post-v1, ADR-011):
-- 🔶 Costco in-warehouse / gas / car-wash (`receiptsWithCounts`) — built; pulled
-  by the Costco scan; `itemDepartmentNumber` → `category_native`. Browser
+- ✅ Costco in-warehouse / gas / car-wash (`receiptsWithCounts`) — pulled by the
+  Costco scan; `itemDepartmentNumber` → `category_native`. Verified in Chrome.
+- 🔶 Target in-store (`order_purchase_type=STORE` + `/store` detail, reusing the
+  detail parser; dpci → category) — built, pulled by the Target scan. Browser
   verification pending.
-- ⬜ Target in-store (`order_purchase_type=STORE` + `/store` detail) — next.
 
 Every order carries an `order_channel` (`online` / `in_store` / `in_warehouse` /
 `gas` / `carwash`) so in-person vs online spend separates downstream.

@@ -74,11 +74,11 @@ async function finishScan(retailer, prevState, newest) {
 const TARGET_ORDER_HISTORY = 'https://api.target.com/guest_order_aggregations/v1/order_history';
 const TARGET_ORDER_DETAIL = 'https://api.target.com/post_orders/v1';
 
-function targetHistoryUrl(pageNumber) {
+function targetHistoryUrl(pageNumber, purchaseType = 'ONLINE') {
   const p = new URLSearchParams({
     page_number: String(pageNumber),
     page_size: '10',
-    order_purchase_type: 'ONLINE',
+    order_purchase_type: purchaseType,
     pending_order: 'true',
     shipt_status: 'true',
   });
@@ -86,15 +86,48 @@ function targetHistoryUrl(pageNumber) {
 }
 
 // Enrich one order with per-line price/tax/category from the order-detail
-// endpoint. Non-fatal: on failure the order keeps its order_history fields.
+// endpoint. Online and in-store use different detail URLs but the same response
+// shape. Non-fatal: on failure the order keeps its order_history fields.
 async function enrichTargetOrder(order, headers) {
-  const url = `${TARGET_ORDER_DETAIL}/${encodeURIComponent(order.order_id)}`;
+  const id = encodeURIComponent(order.order_id);
+  const url =
+    order.order_channel === 'in_store'
+      ? `${TARGET_ORDER_DETAIL}/orders/${id}/store`
+      : `${TARGET_ORDER_DETAIL}/${id}`;
   try {
     const detail = await throttledFetchJson(url, { headers });
     mergeTargetDetail(order, detail);
   } catch (err) {
     console.warn('[sre] detail enrichment failed for', order.order_id, err.message);
   }
+}
+
+// Pull Target in-store orders (order_purchase_type=STORE). Incremental skips
+// receipts already stored (order-independent; no cursor). Returns count stored.
+async function scanTargetStore(mode, headers) {
+  let page = 1;
+  let totalPages = Infinity;
+  let stored = 0;
+  while (page <= totalPages) {
+    let envelope;
+    try {
+      envelope = await throttledFetchJson(targetHistoryUrl(page, 'STORE'), { headers });
+    } catch (err) {
+      console.warn('[sre] target STORE page', page, err.message);
+      break;
+    }
+    totalPages = Number.isFinite(envelope?.total_pages) ? envelope.total_pages : page;
+    const { orders } = parseTargetOrderHistory(envelope);
+    if (orders.length === 0) break;
+    for (const order of orders) {
+      if (mode !== 'full' && (await db.getOrder('target', order.order_id))) continue;
+      await enrichTargetOrder(order, headers);
+      await db.upsertOrder(order);
+      stored += 1;
+    }
+    page += 1;
+  }
+  return stored;
 }
 
 async function scanTarget(mode, config) {
@@ -148,7 +181,15 @@ async function scanTarget(mode, config) {
   }
 
   await finishScan('target', scanState, newest);
-  return { ok: true, stored };
+
+  // Also pull in-store orders (order_purchase_type=STORE).
+  let storeStored = 0;
+  try {
+    storeStored = await scanTargetStore(mode, headers);
+  } catch (err) {
+    console.warn('[sre] target in-store scan failed:', err.message);
+  }
+  return { ok: true, stored: stored + storeStored };
 }
 
 // ---------------------------------------------------------------------------

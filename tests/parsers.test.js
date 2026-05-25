@@ -25,6 +25,9 @@ const targetFixture = JSON.parse(
 const targetDetailFixture = JSON.parse(
   readFileSync(fileURLToPath(new URL('./fixtures/target_order_detail_sample.json', import.meta.url)), 'utf8')
 );
+const targetStoreFixture = JSON.parse(
+  readFileSync(fileURLToPath(new URL('./fixtures/target_store_sample.json', import.meta.url)), 'utf8')
+);
 const costcoFixture = JSON.parse(
   readFileSync(fileURLToPath(new URL('./fixtures/costco_order_sample.json', import.meta.url)), 'utf8')
 );
@@ -55,6 +58,22 @@ test('parseTargetOrderHistory normalizes the confirmed shape', () => {
     ]
   );
   assert.equal(o.items[1].name, 'Paper Towels, 6 "Mega" Rolls');
+});
+
+test('parseTargetOrderHistory handles in-store orders (store_receipt_id, in_store channel, no address PII)', () => {
+  const { orders, skipped } = parseTargetOrderHistory(targetStoreFixture);
+  assert.equal(skipped, 0);
+  assert.equal(orders.length, 1);
+  const o = orders[0];
+  assert.equal(o.order_channel, 'in_store');
+  assert.equal(o.order_id, '6136-0000-0000-0000');
+  assert.equal(o.total, 32.4);
+  assert.equal(o.items[0].sku, '94886701');
+  assert.ok(!JSON.stringify(o).includes('address'), 'address stripped from raw');
+});
+
+test('parseTargetOrderHistory tags online orders with order_channel online', () => {
+  assert.equal(parseTargetOrderHistory(targetFixture).orders[0].order_channel, 'online');
 });
 
 test('parseTargetOrderHistory skips orders missing order_number, keeps the rest', () => {
