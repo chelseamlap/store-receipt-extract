@@ -35,6 +35,30 @@ captures and exports raw line + order data. The join against Simplifi's
 authoritative total and proportional allocation happens downstream (DuckDB /
 Sheets), out of scope here.
 
+## ADR-009 — Costco auth capture + export download mechanism
+
+**Date:** 2026-05-24
+**Status:** Accepted
+
+**Costco auth:** the GraphQL API requires a short-lived session JWT
+(`costco-x-authorization`) plus client headers, minted by costco.com's OAuth —
+not hardcodable. A `webRequest` listener sniffs these headers from the page's
+own requests to `ecom-api.costco.com` and caches them (storage.session); the
+worker replays them. Costco also checks `Origin`/`Referer`, which a worker
+`fetch()` can't set, so a `declarativeNetRequest` session rule stamps them on
+requests to that host. Requirement: open the Costco orders page before scanning
+so the token is captured.
+
+**Downloads:** exports use a **blob URL** + `chrome.downloads.download` from the
+popup (`saveAs:false`, `conflictAction:'uniquify'`, time-stamped filenames).
+`data:` URLs were tried first but hang at `in_progress`. The real blocker was
+Chrome's **"Ask where to save each file"** setting: with it on, the save prompt
+is orphaned when the popup closes and the download stalls forever with no
+filename. We require that setting off (documented in README) and surface a hint
+if a download stalls. A fully setting-agnostic fix would move the download into
+an **offscreen document** (persistent DOM context for blob creation) — deferred
+as overkill for a monthly personal tool.
+
 ## ADR-008 — Scan runs in the service worker, not content scripts
 
 **Date:** 2026-05-22

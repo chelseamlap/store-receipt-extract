@@ -16,8 +16,6 @@
       button:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
       button:disabled { opacity: 0.5; cursor: default; }
       .row { display: flex; gap: 6px; flex-wrap: wrap; }
-      .export { border-top: 1px solid color-mix(in srgb, currentColor 20%, transparent); padding-top: 10px; }
-      .export label { display: block; margin-bottom: 6px; }
       #status { font-size: 12px; min-height: 16px; margin-top: 8px; opacity: 0.9; }
     </style>
   </head>
@@ -32,6 +30,8 @@
       <div class="row">
         <button data-action="scan">Scan</button>
         <button data-action="rescan">Rescan all</button>
+        <button data-action="export-csv">Export CSV</button>
+        <button data-action="export-json">Export JSON</button>
       </div>
     </section>
 
@@ -43,21 +43,8 @@
       <div class="row">
         <button data-action="scan">Scan</button>
         <button data-action="rescan">Rescan all</button>
-      </div>
-    </section>
-
-    <section class="export">
-      <label>
-        Export filter:
-        <select id="export-filter">
-          <option value="">Both retailers</option>
-          <option value="target">Target only</option>
-          <option value="costco">Costco only</option>
-        </select>
-      </label>
-      <div class="row">
-        <button id="export-csv">Export CSV</button>
-        <button id="export-json">Export JSON</button>
+        <button data-action="export-csv">Export CSV</button>
+        <button data-action="export-json">Export JSON</button>
       </div>
     </section>
 

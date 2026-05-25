@@ -138,6 +138,75 @@ async function scanTarget(mode, config) {
 // ---------------------------------------------------------------------------
 
 const COSTCO_ORDER_GQL = 'https://ecom-api.costco.com/ebusiness/order/v1/orders/graphql';
+
+// Costco's GraphQL requires a short-lived session JWT (costco-x-authorization)
+// plus client headers that the site mints via OAuth — they can't be hardcoded.
+// We sniff them from the page's own requests to ecom-api.costco.com and replay
+// them in our worker fetches. Cached in memory + storage.session (survives the
+// worker sleeping; cleared when the browser closes).
+const COSTCO_AUTH_HEADER_NAMES = new Set([
+  'costco-x-authorization',
+  'client-identifier',
+  'costco-x-wcs-clientid',
+  'costco.env',
+  'costco.service',
+]);
+let costcoAuth = null; // { headers: {name:value}, capturedAt }
+
+chrome.webRequest.onBeforeSendHeaders.addListener(
+  (details) => {
+    const grabbed = {};
+    for (const h of details.requestHeaders || []) {
+      if (COSTCO_AUTH_HEADER_NAMES.has(h.name.toLowerCase())) grabbed[h.name] = h.value;
+    }
+    const hasAuth = Object.keys(grabbed).some((n) => n.toLowerCase() === 'costco-x-authorization');
+    if (hasAuth) {
+      costcoAuth = { headers: grabbed, capturedAt: Date.now() };
+      chrome.storage.session.set({ costcoAuth }).catch(() => {});
+      console.log('[sre] captured Costco auth headers:', Object.keys(grabbed).join(', '));
+    }
+  },
+  { urls: ['https://ecom-api.costco.com/*'] },
+  ['requestHeaders', 'extraHeaders']
+);
+
+// Costco's API also checks Origin/Referer, which a worker fetch() can't set.
+// A declarativeNetRequest rule stamps them onto requests to ecom-api. (Harmless
+// for the page's own requests — they already send these exact values.)
+async function ensureCostcoHeaderRule() {
+  try {
+    await chrome.declarativeNetRequest.updateSessionRules({
+      removeRuleIds: [1],
+      addRules: [
+        {
+          id: 1,
+          priority: 1,
+          action: {
+            type: 'modifyHeaders',
+            requestHeaders: [
+              { header: 'origin', operation: 'set', value: 'https://www.costco.com' },
+              { header: 'referer', operation: 'set', value: 'https://www.costco.com/' },
+            ],
+          },
+          condition: {
+            urlFilter: '||ecom-api.costco.com/',
+            resourceTypes: ['xmlhttprequest', 'other'],
+          },
+        },
+      ],
+    });
+  } catch (err) {
+    console.warn('[sre] could not set Costco header rule:', err.message);
+  }
+}
+ensureCostcoHeaderRule();
+
+async function getCostcoAuth() {
+  if (costcoAuth?.headers) return costcoAuth;
+  const { costcoAuth: stored } = await chrome.storage.session.get('costcoAuth');
+  if (stored?.headers) costcoAuth = stored;
+  return costcoAuth;
+}
 const COSTCO_PAGE_SIZE = 10;
 const COSTCO_WINDOW_DAYS = 90; // Costco limits the date range; page in windows
 const COSTCO_LOOKBACK_DAYS = 1095; // ~3 years for a full scan
@@ -166,9 +235,15 @@ function costcoDateStr(d) {
 }
 
 async function costcoGraphql(query, variables) {
+  const auth = await getCostcoAuth();
+  if (!auth?.headers) {
+    const err = new Error('NO_COSTCO_AUTH');
+    err.code = 'NO_AUTH';
+    throw err;
+  }
   return throttledFetchJson(COSTCO_ORDER_GQL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...auth.headers },
     body: JSON.stringify({ query, variables }),
   });
 }
@@ -195,6 +270,15 @@ async function scanCostco(mode, config) {
       error: 'Missing costco.warehouse_number — load the extension from the repo (config.local.json present).',
     };
   }
+
+  const auth = await getCostcoAuth();
+  if (!auth?.headers) {
+    return {
+      ok: false,
+      error: 'Open your Costco "Orders & Purchases" page first (so I can grab the session token), then click Scan.',
+    };
+  }
+  await ensureCostcoHeaderRule();
 
   const scanState = await db.getScanState('costco');
   const stopId = mode === 'full' ? null : scanState?.latest_order_id_seen ?? null;
@@ -227,6 +311,16 @@ async function scanCostco(mode, config) {
           warehouseNumber: String(warehouse),
         });
       } catch (err) {
+        if (err.code === 'NO_AUTH') {
+          return { ok: false, error: 'Costco session token not captured — open your Costco orders page, then Scan.', stored };
+        }
+        if (/HTTP 40[13]/.test(err.message)) {
+          return {
+            ok: false,
+            error: `Costco rejected the request (${err.message}) — your session token likely expired; reopen your Costco orders page and Scan again.`,
+            stored,
+          };
+        }
         return { ok: false, error: `getOnlineOrders: ${err.message}`, stored };
       }
       if (env?.errors?.length) {

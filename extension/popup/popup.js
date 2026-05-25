@@ -3,8 +3,8 @@
 // scans through the service worker.
 
 import * as db from '../db.js';
-import { ordersCsvBlob, itemsCsvBlob } from '../export/csv.js';
-import { fullJsonBlob } from '../export/json.js';
+import { serializeOrdersCsv, serializeItemsCsv } from '../export/csv.js';
+import { serializeFullJson } from '../export/json.js';
 
 const RETAILERS = ['target', 'costco'];
 const statusEl = document.getElementById('status');
@@ -14,10 +14,14 @@ function setStatus(text) {
 }
 
 function fileStamp(date = new Date()) {
+  const p = (n) => String(n).padStart(2, '0');
   const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}${m}${d}`;
+  const m = p(date.getMonth() + 1);
+  const d = p(date.getDate());
+  const hh = p(date.getHours());
+  const mm = p(date.getMinutes());
+  const ss = p(date.getSeconds());
+  return `${y}${m}${d}-${hh}${mm}${ss}`; // include time so each export is a unique file
 }
 
 function fmtLastScan(state) {
@@ -38,12 +42,77 @@ async function refreshStats() {
   }
 }
 
-function download(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  chrome.downloads.download({ url, filename }, () => {
-    // Revoke shortly after the download has been handed off.
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
+// Blob URL download (data: URLs hang at in_progress in chrome.downloads).
+// Resolves on the download() callback so it can never hang; revokes the URL
+// after a delay so the download has time to read it.
+function startDownload(text, mime, filename) {
+  return new Promise((resolve) => {
+    let url;
+    try {
+      url = URL.createObjectURL(new Blob([text], { type: mime }));
+    } catch (e) {
+      resolve({ filename, error: `createObjectURL: ${e.message}` });
+      return;
+    }
+    try {
+      chrome.downloads.download({ url, filename, saveAs: false, conflictAction: 'uniquify' }, (id) => {
+        const error = chrome.runtime.lastError?.message;
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        resolve({ filename, id, error: error ?? (id == null ? 'no download id' : undefined) });
+      });
+    } catch (e) {
+      URL.revokeObjectURL(url);
+      resolve({ filename, error: `download(): ${e.message}` });
+    }
   });
+}
+
+// Resolve once the download reaches a terminal state (or after a timeout), so
+// we report the final path/state rather than the transient in_progress.
+function waitForDownload(id, timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (item) => {
+      if (done) return;
+      done = true;
+      chrome.downloads.onChanged.removeListener(onChanged);
+      resolve(item);
+    };
+    const onChanged = (delta) => {
+      if (delta.id !== id || !delta.state) return;
+      if (delta.state.current !== 'in_progress') {
+        chrome.downloads.search({ id }, (items) => finish(items?.[0]));
+      }
+    };
+    chrome.downloads.onChanged.addListener(onChanged);
+    chrome.downloads.search({ id }, (items) => {
+      const it = items?.[0];
+      if (it && it.state !== 'in_progress') finish(it);
+    });
+    setTimeout(() => chrome.downloads.search({ id }, (items) => finish(items?.[0])), timeoutMs);
+  });
+}
+
+async function reportDownloads(results) {
+  const errs = results.filter((r) => r.error || r.id == null);
+  if (errs.length) {
+    setStatus(`Download error: ${errs.map((e) => `${e.filename}: ${e.error ?? 'no id'}`).join(' | ')}`);
+    return false;
+  }
+  const infos = await Promise.all(results.map((r) => waitForDownload(r.id)));
+  if (infos.some((it) => it && it.state === 'in_progress')) {
+    setStatus('Download stalled. In chrome://settings/downloads turn OFF "Ask where to save each file", then export again.');
+    return false;
+  }
+  const desc = infos
+    .map((it) => {
+      if (!it) return '?';
+      const why = it.state === 'interrupted' ? ` (${it.error ?? 'interrupted'})` : '';
+      return `${it.filename || '(path pending)'} [${it.state}]${why}`;
+    })
+    .join('  •  ');
+  setStatus(desc);
+  return infos.every((it) => it && it.state === 'complete');
 }
 
 async function runScan(retailer, mode) {
@@ -57,29 +126,38 @@ async function runScan(retailer, mode) {
   await refreshStats();
 }
 
-async function exportCsv() {
-  const retailer = document.getElementById('export-filter').value || undefined;
-  const orders = await db.getAllOrders(retailer);
-  if (orders.length === 0) {
-    setStatus('Nothing to export.');
-    return;
+async function exportCsv(retailer) {
+  try {
+    const orders = await db.getAllOrders(retailer);
+    if (orders.length === 0) {
+      setStatus(`No ${retailer} orders to export.`);
+      return;
+    }
+    const stamp = fileStamp();
+    const results = await Promise.all([
+      startDownload(serializeOrdersCsv(orders, retailer), 'text/csv', `orders_${retailer}_${stamp}.csv`),
+      startDownload(serializeItemsCsv(orders, retailer), 'text/csv', `order_items_${retailer}_${stamp}.csv`),
+    ]);
+    await reportDownloads(results);
+  } catch (err) {
+    setStatus(`Export CSV error: ${err.message}`);
   }
-  const tag = retailer || 'all';
-  const stamp = fileStamp();
-  download(ordersCsvBlob(orders, retailer), `orders_${tag}_${stamp}.csv`);
-  download(itemsCsvBlob(orders, retailer), `order_items_${tag}_${stamp}.csv`);
-  setStatus(`Exported ${orders.length} orders to CSV.`);
 }
 
-async function exportJson() {
-  const retailer = document.getElementById('export-filter').value || undefined;
-  const orders = await db.getAllOrders(retailer);
-  if (orders.length === 0) {
-    setStatus('Nothing to export.');
-    return;
+async function exportJson(retailer) {
+  try {
+    const orders = await db.getAllOrders(retailer);
+    if (orders.length === 0) {
+      setStatus(`No ${retailer} orders to export.`);
+      return;
+    }
+    const results = await Promise.all([
+      startDownload(serializeFullJson(orders, retailer), 'application/json', `order_history_${retailer}_${fileStamp()}.json`),
+    ]);
+    await reportDownloads(results);
+  } catch (err) {
+    setStatus(`Export JSON error: ${err.message}`);
   }
-  download(fullJsonBlob(orders, retailer), `order_history_full_${fileStamp()}.json`);
-  setStatus(`Exported ${orders.length} orders to JSON.`);
 }
 
 function wireEvents() {
@@ -87,9 +165,9 @@ function wireEvents() {
     const retailer = section.dataset.retailer;
     section.querySelector('[data-action="scan"]').addEventListener('click', () => runScan(retailer, 'incremental'));
     section.querySelector('[data-action="rescan"]').addEventListener('click', () => runScan(retailer, 'full'));
+    section.querySelector('[data-action="export-csv"]').addEventListener('click', () => exportCsv(retailer));
+    section.querySelector('[data-action="export-json"]').addEventListener('click', () => exportJson(retailer));
   }
-  document.getElementById('export-csv').addEventListener('click', exportCsv);
-  document.getElementById('export-json').addEventListener('click', exportJson);
 }
 
 wireEvents();

@@ -315,7 +315,32 @@ export function mergeCostcoDetail(order, detailEnvelope) {
   order.subtotal = parsed.totals.subtotal ?? order.subtotal;
   order.tax = parsed.totals.tax ?? order.tax;
   order.shipping = parsed.totals.shipping ?? order.shipping;
-  if (parsed.items.length) order.items = parsed.items;
   order.raw_summary = parsed.raw_summary;
+
+  if (!parsed.items.length) return order;
+  const base = Array.isArray(order.items) ? order.items : [];
+  if (base.length === 0) {
+    order.items = parsed.items;
+    return order;
+  }
+
+  // Enrich the online line items (which carry the list descriptions) with
+  // detail pricing, matched by sku. Keep a non-empty name from either source so
+  // descriptions never get dropped.
+  const detailBySku = new Map();
+  for (const di of parsed.items) if (di.sku != null) detailBySku.set(di.sku, di);
+  for (const it of base) {
+    const di = it.sku != null ? detailBySku.get(it.sku) : undefined;
+    if (!di) continue;
+    it.name = it.name || di.name;
+    it.quantity = di.quantity ?? it.quantity;
+    it.unit_price = di.unit_price ?? it.unit_price;
+    it.line_total = di.line_total ?? it.line_total;
+    detailBySku.delete(it.sku);
+  }
+  // Append any detail-only line items the online list didn't include.
+  let idx = base.length;
+  for (const di of detailBySku.values()) base.push({ ...di, line_index: idx++ });
+  order.items = base;
   return order;
 }

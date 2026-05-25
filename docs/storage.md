@@ -83,31 +83,33 @@ Used for incremental scans: stop pagination when we reach
 
 ## Export schemas
 
-Both formats are triggered from the popup and saved via `chrome.downloads` to
-the default Downloads folder. UTF-8. RFC 4180-compliant CSV: comma-separated,
-fields containing commas / quotes / newlines are wrapped in double quotes with
-embedded quotes doubled.
+Exports are **per store** (one store at a time — no combined "both retailers"
+option). Triggered from the popup and saved via `chrome.downloads` (blob URL) to
+the default Downloads folder. Filenames include a timestamp so each export is a
+unique file. UTF-8. RFC 4180-compliant CSV: comma-separated, fields containing
+commas / quotes / newlines are wrapped in double quotes with embedded quotes
+doubled.
+
+> Requires "Ask where to save each file before downloading" to be **off** in
+> `chrome://settings/downloads` (see ADR-009).
 
 ### CSV (two files)
 
-`orders_<retailer>_<YYYYMMDD>.csv`:
+`orders_<retailer>_<YYYYMMDD-HHMMSS>.csv`:
 
 ```
 retailer,order_id,account_hint,ordered_at,total,subtotal,tax,shipping,fulfillment_type,item_count
 ```
 
-`order_items_<retailer>_<YYYYMMDD>.csv`:
+`order_items_<retailer>_<YYYYMMDD-HHMMSS>.csv`:
 
 ```
 retailer,order_id,line_index,sku,name,quantity,unit_price,line_total,category_native
 ```
 
-Both retailers go into one pair of files unless a retailer filter is selected
-in the popup; in that case only that retailer's rows are exported.
-
 ### JSON (one file)
 
-`order_history_full_<YYYYMMDD>.json`:
+`order_history_<retailer>_<YYYYMMDD-HHMMSS>.json`:
 
 ```json
 {

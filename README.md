@@ -42,6 +42,17 @@ docs/        endpoints, storage schema, design decisions
 tests/       node-runnable tests + sanitized fixtures
 ```
 
+## Usage notes
+
+- **Costco:** open your Costco *Orders & Purchases* page once before scanning, so
+  the worker can capture the short-lived session token from the page's own
+  request. Then click Scan.
+- **Downloads must not prompt:** in `chrome://settings/downloads`, turn **off
+  "Ask where to save each file before downloading."** With it on, exports
+  initiated from the popup stall at `in_progress` (the save prompt is orphaned
+  when the popup closes) and no file is written. The popup shows a hint if this
+  happens. Files land in your default Downloads folder, time-stamped per export.
+
 ## Development
 
 ```sh
@@ -65,9 +76,11 @@ Early scaffold. Build order (see project spec):
 5. ✅ Target scan (in the service worker) — order_history fetch + parse +
    incremental + order-detail enrichment (price, tax/fee totals, dpci category);
    verified end-to-end in Chrome
-6. 🔶 Costco scan (service worker) — getOnlineOrders + getOrderDetails over
-   GraphQL, date-windowed pagination, incremental, PII-free queries; parser-tested.
-   Browser verification pending. (Costco online exposes no category → category_native null.)
+6. ✅ Costco scan (service worker) — getOnlineOrders + getOrderDetails over
+   GraphQL with session-token capture (webRequest) + Origin/Referer rule
+   (declarativeNetRequest); date-windowed pagination, incremental, PII-free
+   queries; verified end-to-end in Chrome (names + prices export correctly).
+   (Costco online exposes no category → category_native null.)
 
 Note: scanning runs entirely in the service worker (ADR-008); there are no
 content scripts. `extension/content/common.js` is a shared parser/throttle lib.
