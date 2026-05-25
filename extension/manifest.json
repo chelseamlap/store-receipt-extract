@@ -7,7 +7,6 @@
   "host_permissions": [
     "https://www.target.com/*",
     "https://api.target.com/*",
-    "https://redsky.target.com/*",
     "https://www.costco.com/*",
     "https://ecom-api.costco.com/*"
   ],

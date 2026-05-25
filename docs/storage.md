@@ -54,6 +54,12 @@ wholesale** (raw, total, items). This handles status changes (e.g. shipped →
 delivered). `first_seen_at` is preserved across upserts; `last_updated_at` is
 refreshed on every write.
 
+**PII in `raw`:** `raw` keeps the retailer's order payload for full-fidelity
+JSON export, but identifying fields are stripped before storage — Target's
+`address` (name + ZIP) and Costco's `emailAddress`. The order-detail responses'
+PII (guest_profile, payments, membership, card) is never read; only the
+money-only `raw_summary` is kept.
+
 ### Object store: `product_cache`
 
 Target enrichment cache (may extend to Costco).
@@ -73,11 +79,19 @@ Record:
 Record:
 
 ```js
-{ retailer, last_scan_at, latest_order_id_seen, latest_order_date_seen }
+{
+  retailer, last_scan_at, latest_order_id_seen, latest_order_date_seen,
+  // present only while a FULL scan is mid-flight (cleared on completion):
+  resume: { mode: "full", newest, page }            // target
+  resume: { mode: "full", newest, windowEndMs }     // costco
+}
 ```
 
 Used for incremental scans: stop pagination when we reach
-`latest_order_id_seen`.
+`latest_order_id_seen`. `latest_order_id_seen` is updated only on **clean
+completion** (it marks the last complete scan). A full scan additionally writes
+a `resume` cursor after each page/window so an interrupted run continues instead
+of restarting; it's dropped on completion.
 
 ---
 

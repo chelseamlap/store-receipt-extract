@@ -111,6 +111,9 @@ export function parseTargetOrderHistory(envelope) {
       raw_item: line,
     }));
 
+    // Drop PII before persisting raw: `address` carries first_name + zip_code.
+    const { address, ...rawSafe } = order;
+    void address;
     out.orders.push({
       retailer: 'target',
       order_id: String(orderId),
@@ -121,7 +124,7 @@ export function parseTargetOrderHistory(envelope) {
       tax: null,
       shipping: null,
       fulfillment_type: lines[0]?.fulfillment_spec?.fulfillment_type ?? null,
-      raw: order,
+      raw: rawSafe,
       items,
     });
   }

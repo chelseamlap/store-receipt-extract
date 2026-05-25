@@ -53,6 +53,17 @@ async function loadConfig() {
   return configPromise;
 }
 
+// Write the final scan_state on clean completion: set latest_order_id_seen to
+// this scan's newest order and clear any resume cursor (setScanState replaces
+// the record wholesale, so omitting `resume` drops it).
+async function finishScan(retailer, prevState, newest) {
+  await db.setScanState(retailer, {
+    last_scan_at: new Date().toISOString(),
+    latest_order_id_seen: newest?.id ?? prevState?.latest_order_id_seen ?? null,
+    latest_order_date_seen: newest?.date ?? prevState?.latest_order_date_seen ?? null,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Target scan
 // ---------------------------------------------------------------------------
@@ -90,10 +101,11 @@ async function scanTarget(mode, config) {
 
   const scanState = await db.getScanState('target');
   const stopId = mode === 'full' ? null : scanState?.latest_order_id_seen ?? null;
+  const resuming = mode === 'full' && scanState?.resume?.mode === 'full';
 
-  let page = 1;
+  let page = resuming ? scanState.resume.page : 1;
+  let newest = resuming ? scanState.resume.newest : null;
   let totalPages = Infinity;
-  let newest = null;
   let stored = 0;
 
   while (page <= totalPages) {
@@ -121,15 +133,18 @@ async function scanTarget(mode, config) {
     }
     if (reachedKnown) break;
     page += 1;
+    // Checkpoint a full scan so an interrupted run resumes instead of restarting.
+    // latest_order_id_seen is left untouched (it marks the last *complete* scan).
+    if (mode === 'full') {
+      await db.setScanState('target', {
+        ...scanState,
+        last_scan_at: new Date().toISOString(),
+        resume: { mode: 'full', page, newest },
+      });
+    }
   }
 
-  if (newest) {
-    await db.setScanState('target', {
-      last_scan_at: new Date().toISOString(),
-      latest_order_id_seen: newest.id,
-      latest_order_date_seen: newest.date,
-    });
-  }
+  await finishScan('target', scanState, newest);
   return { ok: true, stored };
 }
 
@@ -282,6 +297,7 @@ async function scanCostco(mode, config) {
 
   const scanState = await db.getScanState('costco');
   const stopId = mode === 'full' ? null : scanState?.latest_order_id_seen ?? null;
+  const resuming = mode === 'full' && scanState?.resume?.mode === 'full';
 
   const today = new Date();
   const minDate =
@@ -289,8 +305,8 @@ async function scanCostco(mode, config) {
       ? new Date(new Date(scanState.latest_order_date_seen).getTime() - 7 * DAY_MS)
       : new Date(today.getTime() - COSTCO_LOOKBACK_DAYS * DAY_MS);
 
-  let windowEnd = new Date(today);
-  let newest = null;
+  let windowEnd = resuming ? new Date(scanState.resume.windowEndMs) : new Date(today);
+  let newest = resuming ? scanState.resume.newest : null;
   let stored = 0;
   let reachedKnown = false;
 
@@ -347,15 +363,17 @@ async function scanCostco(mode, config) {
       page += 1;
     }
     windowEnd = windowStart; // older window next (overlap is harmless — upsert is idempotent)
+    // Checkpoint a full scan so an interrupted run resumes from this window.
+    if (mode === 'full') {
+      await db.setScanState('costco', {
+        ...scanState,
+        last_scan_at: new Date().toISOString(),
+        resume: { mode: 'full', windowEndMs: windowEnd.getTime(), newest },
+      });
+    }
   }
 
-  if (newest) {
-    await db.setScanState('costco', {
-      last_scan_at: new Date().toISOString(),
-      latest_order_id_seen: newest.id,
-      latest_order_date_seen: newest.date,
-    });
-  }
+  await finishScan('costco', scanState, newest);
   return { ok: true, stored };
 }
 

@@ -20,9 +20,3 @@ export function buildFullExport(orders, retailer, exportedAt) {
 export function serializeFullJson(orders, retailer, exportedAt) {
   return JSON.stringify(buildFullExport(orders, retailer, exportedAt), null, 2);
 }
-
-export function fullJsonBlob(orders, retailer, exportedAt) {
-  return new Blob([serializeFullJson(orders, retailer, exportedAt)], {
-    type: 'application/json',
-  });
-}

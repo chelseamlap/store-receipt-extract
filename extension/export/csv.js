@@ -38,6 +38,16 @@ export function csvField(value) {
   return s;
 }
 
+// Guard free-text fields against spreadsheet formula injection: a value that
+// opens with =,+,-,@ (or whitespace control chars) can execute as a formula in
+// Excel/Sheets. Prefix with an apostrophe so it's treated as literal text.
+// Applied only to text columns (names, categories) — never to numeric columns,
+// so legitimate negatives like -5.49 stay numeric.
+function safeText(value) {
+  if (typeof value === 'string' && /^[=+\-@\t\r]/.test(value)) return `'${value}`;
+  return value;
+}
+
 function csvRow(values) {
   return values.map(csvField).join(',');
 }
@@ -53,13 +63,13 @@ export function serializeOrdersCsv(orders, retailer) {
       csvRow([
         o.retailer,
         o.order_id,
-        o.account_hint,
+        safeText(o.account_hint),
         o.ordered_at,
         o.total,
         o.subtotal,
         o.tax,
         o.shipping,
-        o.fulfillment_type,
+        safeText(o.fulfillment_type),
         Array.isArray(o.items) ? o.items.length : 0,
       ])
     );
@@ -77,22 +87,14 @@ export function serializeItemsCsv(orders, retailer) {
           o.order_id,
           item.line_index,
           item.sku,
-          item.name,
+          safeText(item.name),
           item.quantity,
           item.unit_price,
           item.line_total,
-          item.category_native,
+          safeText(item.category_native),
         ])
       );
     }
   }
   return rows.join('\r\n') + '\r\n';
-}
-
-export function ordersCsvBlob(orders, retailer) {
-  return new Blob([serializeOrdersCsv(orders, retailer)], { type: 'text/csv' });
-}
-
-export function itemsCsvBlob(orders, retailer) {
-  return new Blob([serializeItemsCsv(orders, retailer)], { type: 'text/csv' });
 }

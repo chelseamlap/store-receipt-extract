@@ -73,6 +73,32 @@ test('serializeItemsCsv flattens items and quotes tricky fields', () => {
   assert.ok(csv.includes('"Eggs, 24 ct\nlarge"'));
 });
 
+test('items CSV guards formula injection in text but not numeric fields', () => {
+  const orders = [
+    {
+      retailer: 'costco',
+      order_id: 'C-9',
+      items: [
+        {
+          line_index: 0,
+          sku: '1',
+          name: '=HYPERLINK("evil")',
+          quantity: 1,
+          unit_price: -5.49, // refund — must stay numeric, not quoted with '
+          line_total: -5.49,
+          category_native: null,
+        },
+      ],
+    },
+  ];
+  const csv = serializeItemsCsv(orders);
+  const row = csv.trimEnd().split('\r\n')[1];
+  // name neutralized with a leading apostrophe (then RFC-quoted for the paren/quote)
+  assert.ok(csv.includes(`"'=HYPERLINK(""evil"")"`), 'formula-leading name is prefixed with apostrophe');
+  // negative price is untouched
+  assert.ok(row.includes(',-5.49,-5.49,'), 'negative numeric fields are not altered');
+});
+
 test('retailer filter limits rows', () => {
   const orders = sampleOrders();
   assert.equal(serializeOrdersCsv(orders, 'costco').trimEnd().split('\r\n').length, 2); // header + 1

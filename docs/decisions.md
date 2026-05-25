@@ -35,6 +35,28 @@ captures and exports raw line + order data. The join against Simplifi's
 authoritative total and proportional allocation happens downstream (DuckDB /
 Sheets), out of scope here.
 
+## ADR-010 — Review hardening: PII strip + resumable full scans
+
+**Date:** 2026-05-24
+**Status:** Accepted
+
+From a code review:
+
+- **PII in `raw`:** parsers now strip identifying fields before persisting raw
+  (Target `address`, Costco `emailAddress`) so the JSON export / IndexedDB don't
+  retain name/ZIP/email. Detail-endpoint PII was already excluded.
+- **Resumable full scans:** `scan_state` gains a `resume` cursor written after
+  each page (Target) / window (Costco) of a *full* scan, so an interrupted run
+  (e.g. MV3 worker termination on a multi-minute scan) resumes instead of
+  restarting. `latest_order_id_seen` is set only on clean completion, so the
+  incremental stop point always references the last *complete* scan — avoiding
+  the trap where checkpointing the newest id mid-scan would make incremental
+  permanently skip not-yet-stored older orders. Incremental scans are short and
+  simply restart (no cursor).
+- **CSV formula-injection guard** on free-text columns only (names, categories);
+  numeric columns keep legitimate negatives. Removed unused `*Blob` export
+  helpers and the unused `redsky.target.com` host permission.
+
 ## ADR-009 — Costco auth capture + export download mechanism
 
 **Date:** 2026-05-24
