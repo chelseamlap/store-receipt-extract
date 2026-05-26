@@ -42,10 +42,10 @@ orchestration is not unit-tested).
   scan Target, check `order_items_target_*.csv` for `order_channel=in_store`
   rows with prices + dpci category; watch the SW console for
   `[sre] detail enrichment failed` on `/store` IDs.
-- **Expand the Costco department map** (`extension/export/costco-departments.js`)
-  from a fuller set of receipts — it's inferred from one export; unmapped codes
-  show `Dept <n>`. Paste distinct codes + a sample item name each and they can
-  be filled in one pass.
+- **Costco department map** (`extension/export/costco-departments.js`) is now
+  populated from a full warehouse export (depts 0,12–95). Extend it only if a
+  new `Dept <n>` shows up in a future export; labels apply at export (no
+  re-scan).
 - **Gas / car-wash receipts:** the detail `documentType` (`gas`/`carwash`) is a
   guess (none in the capture); verify when you have fuel receipts.
 - **Simplifi join** (downstream, DuckDB): swap `orders.total` for the Simplifi
