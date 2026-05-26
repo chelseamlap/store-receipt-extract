@@ -18,7 +18,7 @@ schemas, `docs/decisions.md` for ADRs, `docs/analysis.md` for the DuckDB step.
 | Target online (order_history + post_orders detail, dpci category) | ✅ verified in Chrome |
 | Costco online (getOnlineOrders + getOrderDetails) | ✅ verified |
 | Costco in-warehouse / gas / car-wash (receiptsWithCounts) | ✅ verified (warehouse); gas/car-wash code paths unverified — none in test data |
-| Target **in-store** (order_purchase_type=STORE + /store detail) | 🔶 built + parser-tested, **NOT browser-verified** |
+| Target **in-store** (order_purchase_type=STORE + /store detail) | ✅ verified in Chrome |
 | Export: order_channel, category_label (Costco dept map), is_adjustment | ✅ |
 | Downstream DuckDB recipe | ✅ documented (`docs/analysis.md`), not run here |
 
@@ -38,10 +38,8 @@ orchestration is not unit-tested).
 - After any code change: reload the extension on `chrome://extensions`.
 
 ## Decision menu for next time
-- **Verify Target in-store** in Chrome (the one built-but-unverified piece):
-  scan Target, check `order_items_target_*.csv` for `order_channel=in_store`
-  rows with prices + dpci category; watch the SW console for
-  `[sre] detail enrichment failed` on `/store` IDs.
+All scan paths (Target online + in-store, Costco online + in-warehouse) are now
+verified end-to-end in Chrome. Remaining options:
 - **Costco department map** (`extension/export/costco-departments.js`) is now
   populated from a full warehouse export (depts 0,12–95). Extend it only if a
   new `Dept <n>` shows up in a future export; labels apply at export (no
