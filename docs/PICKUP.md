@@ -37,6 +37,12 @@ orchestration is not unit-tested).
   short-lived session token is captured (ADR-009).
 - After any code change: reload the extension on `chrome://extensions`.
 
+## Scope
+**This repo is export-only** — capture itemized Target + Costco data and emit
+CSV/JSON. The Simplifi join, proportional allocation against authoritative
+totals, and any reporting live in the **separate analysis repo**, which owns the
+Simplifi data + merchant→retailer matching. Don't add that processing here.
+
 ## Decision menu for next time
 All scan paths (Target online + in-store, Costco online + in-warehouse) are now
 verified end-to-end in Chrome. Remaining options:
@@ -44,15 +50,15 @@ verified end-to-end in Chrome. Remaining options:
   populated from a full warehouse export (depts 0,12–95). Extend it only if a
   new `Dept <n>` shows up in a future export; labels apply at export (no
   re-scan).
-- **Gas / car-wash receipts:** the detail `documentType` (`gas`/`carwash`) is a
-  guess (none in the capture); verify when you have fuel receipts.
-- **Simplifi join** (downstream, DuckDB): swap `orders.total` for the Simplifi
-  transaction amount in `docs/analysis.md` step 3.
 - **Known data quirks** (not bugs): `line_total` is authoritative (not
   unit_price×qty for weighed items); online order totals can diverge from line
-  sums (returns/promos — the allocation absorbs it).
+  sums (returns/promos — the downstream allocation absorbs it).
 - **Deferred:** offscreen-document download (to avoid the settings requirement);
   per-page resume cursor exists for full scans (ADR-010) but isn't stress-tested.
+
+Out of scope here (→ analysis repo): Simplifi join + category allocation.
+Costco gas/car-wash reconciles cleanly via Simplifi, so no in-extension work
+needed.
 
 ## Where things live
 - Repo / remote: `~/personal-repo/store-receipt-extract` → https://github.com/chelseamlap/store-receipt-extract (`main`).
