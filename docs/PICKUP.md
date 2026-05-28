@@ -35,6 +35,11 @@ orchestration is not unit-tested).
   `chrome://settings/downloads`, or exports stall (ADR-009).
 - **Costco:** open your *Orders & Purchases* page before scanning so the
   short-lived session token is captured (ADR-009).
+- **Family / shared accounts:** Costco (and Target households) scope orders to
+  each login. Scan once per person: set `<retailer>.account_name` in
+  `config.local.json` (e.g. `"chelsea"`, `"spouse"`) before each scan — it
+  populates `account_hint` and goes into the export filename so files don't
+  mix. See README "Usage notes".
 - After any code change: reload the extension on `chrome://extensions`.
 
 ## Scope

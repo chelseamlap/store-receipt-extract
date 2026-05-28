@@ -9,6 +9,26 @@ import { serializeFullJson } from '../export/json.js';
 const RETAILERS = ['target', 'costco'];
 const statusEl = document.getElementById('status');
 
+// Optional: per-retailer account label from config.local.json -> filename segment.
+// Lets you scan multiple family logins (Costco shared accounts, Target households)
+// without mixing exports — update config.local.json's <retailer>.account_name when
+// you switch logins, then scan/export.
+let configPromise = null;
+function loadConfig() {
+  if (!configPromise) {
+    configPromise = fetch(chrome.runtime.getURL('config.local.json'))
+      .then((r) => (r.ok ? r.json() : {}))
+      .catch(() => ({}));
+  }
+  return configPromise;
+}
+function accountSuffix(retailer, cfg) {
+  const raw = cfg?.[retailer]?.account_name;
+  if (!raw) return '';
+  const safe = String(raw).trim().replace(/[^A-Za-z0-9._-]+/g, '_');
+  return safe ? `_${safe}` : '';
+}
+
 function setStatus(text) {
   statusEl.textContent = text;
 }
@@ -134,9 +154,10 @@ async function exportCsv(retailer) {
       return;
     }
     const stamp = fileStamp();
+    const acct = accountSuffix(retailer, await loadConfig());
     const results = await Promise.all([
-      startDownload(serializeOrdersCsv(orders, retailer), 'text/csv', `orders_${retailer}_${stamp}.csv`),
-      startDownload(serializeItemsCsv(orders, retailer), 'text/csv', `order_items_${retailer}_${stamp}.csv`),
+      startDownload(serializeOrdersCsv(orders, retailer), 'text/csv', `orders_${retailer}${acct}_${stamp}.csv`),
+      startDownload(serializeItemsCsv(orders, retailer), 'text/csv', `order_items_${retailer}${acct}_${stamp}.csv`),
     ]);
     await reportDownloads(results);
   } catch (err) {
@@ -151,8 +172,9 @@ async function exportJson(retailer) {
       setStatus(`No ${retailer} orders to export.`);
       return;
     }
+    const acct = accountSuffix(retailer, await loadConfig());
     const results = await Promise.all([
-      startDownload(serializeFullJson(orders, retailer), 'application/json', `order_history_${retailer}_${fileStamp()}.json`),
+      startDownload(serializeFullJson(orders, retailer), 'application/json', `order_history_${retailer}${acct}_${fileStamp()}.json`),
     ]);
     await reportDownloads(results);
   } catch (err) {

@@ -104,7 +104,7 @@ async function enrichTargetOrder(order, headers) {
 
 // Pull Target in-store orders (order_purchase_type=STORE). Incremental skips
 // receipts already stored (order-independent; no cursor). Returns count stored.
-async function scanTargetStore(mode, headers) {
+async function scanTargetStore(mode, headers, accountHint) {
   let page = 1;
   let totalPages = Infinity;
   let stored = 0;
@@ -122,6 +122,7 @@ async function scanTargetStore(mode, headers) {
     for (const order of orders) {
       if (mode !== 'full' && (await db.getOrder('target', order.order_id))) continue;
       await enrichTargetOrder(order, headers);
+      order.account_hint = accountHint ?? null;
       await db.upsertOrder(order);
       stored += 1;
     }
@@ -164,6 +165,7 @@ async function scanTarget(mode, config) {
         break;
       }
       await enrichTargetOrder(order, headers);
+      order.account_hint = config?.target?.account_name ?? null;
       await db.upsertOrder(order);
       stored += 1;
     }
@@ -185,7 +187,7 @@ async function scanTarget(mode, config) {
   // Also pull in-store orders (order_purchase_type=STORE).
   let storeStored = 0;
   try {
-    storeStored = await scanTargetStore(mode, headers);
+    storeStored = await scanTargetStore(mode, headers, config?.target?.account_name ?? null);
   } catch (err) {
     console.warn('[sre] target in-store scan failed:', err.message);
   }
@@ -327,7 +329,7 @@ const RECEIPTS_DETAIL = `query receiptsWithCounts($barcode:String!,$documentType
 // Pull in-warehouse/gas/car-wash receipts over the lookback window. Incremental
 // skips barcodes already stored (order-independent; no cursor needed). Returns
 // the count stored. Non-fatal per receipt.
-async function scanCostcoReceipts(mode) {
+async function scanCostcoReceipts(mode, accountHint) {
   const today = new Date();
   const minDate = new Date(today.getTime() - COSTCO_LOOKBACK_DAYS * DAY_MS);
   let windowEnd = new Date(today);
@@ -370,6 +372,7 @@ async function scanCostcoReceipts(mode) {
       }
       const rec = parseCostcoReceiptDetail(detailEnv);
       if (rec) {
+        rec.account_hint = accountHint ?? null;
         await db.upsertOrder(rec);
         stored += 1;
       }
@@ -486,6 +489,7 @@ async function scanCostco(mode, config) {
           break;
         }
         await enrichCostcoOrder(order);
+        order.account_hint = config?.costco?.account_name ?? null;
         await db.upsertOrder(order);
         stored += 1;
       }
@@ -508,7 +512,7 @@ async function scanCostco(mode, config) {
   // Also pull in-warehouse / gas / car-wash receipts (separate API, same auth).
   let receiptsStored = 0;
   try {
-    receiptsStored = await scanCostcoReceipts(mode);
+    receiptsStored = await scanCostcoReceipts(mode, config?.costco?.account_name ?? null);
   } catch (err) {
     console.warn('[sre] costco receipts scan failed:', err.message);
   }
