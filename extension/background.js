@@ -27,6 +27,48 @@ const PUBLIC_CONFIG_DEFAULTS = {
   costco: { client_id: '4900eb1f-0c10-4bd9-99c3-c59e6c1ecebf', locale: ['en-US'] },
 };
 
+// Decode a JWT payload (no signature verification — we only read claims the
+// page itself already trusts). Returns null on any error.
+function decodeJwtPayload(token) {
+  try {
+    const t = String(token || '').replace(/^Bearer\s+/i, '');
+    const part = t.split('.')[1];
+    if (!part) return null;
+    let b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    return JSON.parse(atob(b64));
+  } catch {
+    return null;
+  }
+}
+
+// A short, filename-safe label derived from a person name (preferring a first
+// name) — used as account_hint and filename segment. Falls back to a short id.
+function safeAccountLabel(value) {
+  if (value == null) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+  return s.replace(/[^A-Za-z0-9._-]+/g, '_').toLowerCase();
+}
+
+async function getStoredAccount(retailer) {
+  const key = retailer === 'target' ? 'targetAccount' : 'costcoAccount';
+  const data = await chrome.storage.local.get(key);
+  return data[key] || null;
+}
+async function setStoredAccount(retailer, label) {
+  const key = retailer === 'target' ? 'targetAccount' : 'costcoAccount';
+  await chrome.storage.local.set({ [key]: label }).catch(() => {});
+}
+
+// Resolve the account label for a scan: explicit config override wins, then the
+// session-derived value we've stashed, then null (no hint, no filename segment).
+async function resolveAccountHint(retailer, config) {
+  const override = config?.[retailer]?.account_name;
+  if (override) return safeAccountLabel(override);
+  return await getStoredAccount(retailer);
+}
+
 function mergeConfig(base, override) {
   const out = { ...base };
   for (const key of Object.keys(override || {})) {
@@ -139,6 +181,9 @@ async function scanTarget(mode, config) {
   const scanState = await db.getScanState('target');
   const stopId = mode === 'full' ? null : scanState?.latest_order_id_seen ?? null;
   const resuming = mode === 'full' && scanState?.resume?.mode === 'full';
+  // Resolved at scan start (config override wins); also derived from the first
+  // order_history page below so account auto-detects on a login switch.
+  let accountHint = await resolveAccountHint('target', config);
 
   let page = resuming ? scanState.resume.page : 1;
   let newest = resuming ? scanState.resume.newest : null;
@@ -154,6 +199,20 @@ async function scanTarget(mode, config) {
     }
     totalPages = Number.isFinite(envelope?.total_pages) ? envelope.total_pages : page;
 
+    // Auto-derive an account label on the first page if config didn't override.
+    // The envelope's first order carries the account holder's first name in
+    // address[0].first_name (PII isn't persisted to raw — only the label here).
+    if (!accountHint) {
+      const first = envelope?.orders?.[0];
+      const detected = safeAccountLabel(
+        first?.address?.[0]?.first_name || (envelope?.guest_id && String(envelope.guest_id).slice(0, 8))
+      );
+      if (detected) {
+        accountHint = detected;
+        setStoredAccount('target', detected);
+      }
+    }
+
     const { orders } = parseTargetOrderHistory(envelope);
     if (orders.length === 0) break;
 
@@ -165,7 +224,7 @@ async function scanTarget(mode, config) {
         break;
       }
       await enrichTargetOrder(order, headers);
-      order.account_hint = config?.target?.account_name ?? null;
+      order.account_hint = accountHint;
       await db.upsertOrder(order);
       stored += 1;
     }
@@ -187,7 +246,7 @@ async function scanTarget(mode, config) {
   // Also pull in-store orders (order_purchase_type=STORE).
   let storeStored = 0;
   try {
-    storeStored = await scanTargetStore(mode, headers, config?.target?.account_name ?? null);
+    storeStored = await scanTargetStore(mode, headers, accountHint);
   } catch (err) {
     console.warn('[sre] target in-store scan failed:', err.message);
   }
@@ -225,6 +284,17 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
       costcoAuth = { headers: grabbed, capturedAt: Date.now() };
       chrome.storage.session.set({ costcoAuth }).catch(() => {});
       console.log('[sre] captured Costco auth headers:', Object.keys(grabbed).join(', '));
+      // Decode the JWT for the account's first name / id and stash it. Used
+      // as account_hint + filename segment so shared logins don't get mixed.
+      const auth = Object.entries(grabbed).find(([k]) => k.toLowerCase() === 'costco-x-authorization')?.[1];
+      const payload = decodeJwtPayload(auth);
+      const label = safeAccountLabel(
+        payload?.given_name ||
+          (payload?.name && String(payload.name).split(/\s+/)[0]) ||
+          payload?.unique_name ||
+          (payload?.oid ? String(payload.oid).replace(/-/g, '').slice(0, 8) : null)
+      );
+      if (label) setStoredAccount('costco', label);
     }
   },
   { urls: ['https://ecom-api.costco.com/*'] },
@@ -427,6 +497,8 @@ async function scanCostco(mode, config) {
     };
   }
   await ensureCostcoHeaderRule();
+  // Account label: config override > session-derived (from the captured JWT).
+  const accountHint = await resolveAccountHint('costco', config);
 
   const scanState = await db.getScanState('costco');
   const stopId = mode === 'full' ? null : scanState?.latest_order_id_seen ?? null;
@@ -489,7 +561,7 @@ async function scanCostco(mode, config) {
           break;
         }
         await enrichCostcoOrder(order);
-        order.account_hint = config?.costco?.account_name ?? null;
+        order.account_hint = accountHint;
         await db.upsertOrder(order);
         stored += 1;
       }
@@ -512,7 +584,7 @@ async function scanCostco(mode, config) {
   // Also pull in-warehouse / gas / car-wash receipts (separate API, same auth).
   let receiptsStored = 0;
   try {
-    receiptsStored = await scanCostcoReceipts(mode, config?.costco?.account_name ?? null);
+    receiptsStored = await scanCostcoReceipts(mode, accountHint);
   } catch (err) {
     console.warn('[sre] costco receipts scan failed:', err.message);
   }

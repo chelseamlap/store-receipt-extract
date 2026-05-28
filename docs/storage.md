@@ -101,9 +101,11 @@ of restarting; it's dropped on completion.
 Exports are **per store** (one store at a time — no combined "both retailers"
 option). Triggered from the popup and saved via `chrome.downloads` (blob URL) to
 the default Downloads folder. Filenames include a timestamp so each export is a
-unique file, and an account label segment when `<retailer>.account_name` is set
-in `config.local.json` (e.g. `orders_costco_chelsea_<stamp>.csv`) — used for
-shared/family logins to keep exports separate. UTF-8. RFC 4180-compliant CSV:
+unique file, and an account label segment auto-detected from the live session
+(Costco JWT given-name; Target order address first-name), e.g.
+`orders_costco_chelsea_<stamp>.csv` — keeps shared/family logins separate
+without any per-scan configuration. Optionally overridable via
+`<retailer>.account_name` in `config.local.json`. UTF-8. RFC 4180-compliant CSV:
 comma-separated, fields containing commas / quotes / newlines are wrapped in
 double quotes with embedded quotes doubled.
 

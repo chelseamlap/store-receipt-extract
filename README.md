@@ -48,12 +48,13 @@ tests/       node-runnable tests + sanitized fixtures
   the worker can capture the short-lived session token from the page's own
   request. Then click Scan.
 - **Shared / family accounts:** orders are scoped to whoever is logged in, so
-  scan **once per person's login**. Set `<retailer>.account_name` in
-  `config.local.json` (e.g. `"chelsea"`, `"spouse"`) before each scan — it's
-  written to `account_hint` on stored orders and included in the export
-  filename (`orders_costco_chelsea_<stamp>.csv`), so files from different
-  logins don't get mixed up. Workflow: edit `account_name` → log into that
-  account → Scan → Export.
+  scan **once per person's login** — just log into that account and click Scan.
+  The account label is **auto-detected from the live session** (Costco JWT
+  given-name; Target order address first-name), stored as `account_hint` on
+  each order, and included in the export filename
+  (`orders_costco_chelsea_<stamp>.csv`). No per-login config edits needed.
+  Optional override: set `<retailer>.account_name` in `config.local.json` if
+  you want a custom label.
 - **Downloads must not prompt:** in `chrome://settings/downloads`, turn **off
   "Ask where to save each file before downloading."** With it on, exports
   initiated from the popup stall at `in_progress` (the save prompt is orphaned

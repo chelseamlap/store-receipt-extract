@@ -9,10 +9,11 @@ import { serializeFullJson } from '../export/json.js';
 const RETAILERS = ['target', 'costco'];
 const statusEl = document.getElementById('status');
 
-// Optional: per-retailer account label from config.local.json -> filename segment.
-// Lets you scan multiple family logins (Costco shared accounts, Target households)
-// without mixing exports — update config.local.json's <retailer>.account_name when
-// you switch logins, then scan/export.
+// Account label resolution matches background.js: config.<retailer>.account_name
+// is an optional override; otherwise we use what the worker auto-detected from
+// the live session (Costco JWT given_name, Target order address first_name) and
+// stashed in chrome.storage.local. Filename segment uses the result; empty when
+// nothing's known yet (e.g. first export before a scan).
 let configPromise = null;
 function loadConfig() {
   if (!configPromise) {
@@ -22,11 +23,16 @@ function loadConfig() {
   }
   return configPromise;
 }
-function accountSuffix(retailer, cfg) {
-  const raw = cfg?.[retailer]?.account_name;
-  if (!raw) return '';
-  const safe = String(raw).trim().replace(/[^A-Za-z0-9._-]+/g, '_');
-  return safe ? `_${safe}` : '';
+async function accountSuffix(retailer) {
+  const cfg = await loadConfig();
+  const override = cfg?.[retailer]?.account_name;
+  if (override) {
+    const safe = String(override).trim().replace(/[^A-Za-z0-9._-]+/g, '_');
+    return safe ? `_${safe}` : '';
+  }
+  const key = retailer === 'target' ? 'targetAccount' : 'costcoAccount';
+  const data = await chrome.storage.local.get(key);
+  return data[key] ? `_${data[key]}` : '';
 }
 
 function setStatus(text) {
@@ -154,7 +160,7 @@ async function exportCsv(retailer) {
       return;
     }
     const stamp = fileStamp();
-    const acct = accountSuffix(retailer, await loadConfig());
+    const acct = await accountSuffix(retailer);
     const results = await Promise.all([
       startDownload(serializeOrdersCsv(orders, retailer), 'text/csv', `orders_${retailer}${acct}_${stamp}.csv`),
       startDownload(serializeItemsCsv(orders, retailer), 'text/csv', `order_items_${retailer}${acct}_${stamp}.csv`),
@@ -172,7 +178,7 @@ async function exportJson(retailer) {
       setStatus(`No ${retailer} orders to export.`);
       return;
     }
-    const acct = accountSuffix(retailer, await loadConfig());
+    const acct = await accountSuffix(retailer);
     const results = await Promise.all([
       startDownload(serializeFullJson(orders, retailer), 'application/json', `order_history_${retailer}${acct}_${fileStamp()}.json`),
     ]);
