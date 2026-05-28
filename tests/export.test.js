@@ -69,7 +69,7 @@ test('serializeOrdersCsv writes header, item_count, and blank for null', () => {
 test('serializeItemsCsv flattens items and quotes tricky fields', () => {
   const csv = serializeItemsCsv(sampleOrders());
   const lines = csv.trimEnd().split('\r\n');
-  assert.equal(lines[0], 'retailer,order_channel,order_id,line_index,sku,name,quantity,unit_price,line_total,category_native,category_label,is_adjustment,adjustment_reason');
+  assert.equal(lines[0], 'retailer,order_channel,order_id,line_index,sku,name,quantity,unit_price,line_total,category_native,category_label,is_adjustment,adjustment_reason,parent_sku');
   assert.equal(lines.length, 1 + 3, 'header + 3 item rows');
   assert.ok(csv.includes('"Paper Towels, 6 ""Mega"" Rolls"'));
   assert.ok(csv.includes('"Eggs, 24 ct\nlarge"'));
@@ -116,8 +116,29 @@ test('items CSV flags adjustments with a reason (discount / deposit / fee)', () 
     },
   ];
   const rows = serializeItemsCsv(orders).trimEnd().split('\r\n').slice(1);
-  const flags = rows.map((r) => r.split(',').slice(-2).join(',')); // is_adjustment,adjustment_reason
-  assert.deepEqual(flags, ['false,', 'true,discount', 'true,deposit', 'true,fee']);
+  const flags = rows.map((r) => r.split(',').slice(-3).join(',')); // is_adjustment,adjustment_reason,parent_sku
+  assert.deepEqual(flags, ['false,,', 'true,discount,100', 'true,deposit,100', 'true,fee,']);
+});
+
+test('items CSV links Costco adjustments to their parent sku (numeric + positional)', () => {
+  const orders = [
+    {
+      retailer: 'costco', order_channel: 'in_warehouse', order_id: 'W-3',
+      items: [
+        { line_index: 0, sku: '1218715', name: 'NUTELLA & GO 16 CT' },
+        { line_index: 1, sku: '332279',  name: '/1218715' },               // numeric -> 1218715
+        { line_index: 2, sku: '11357',   name: 'STARB FRENCH BEANS' },
+        { line_index: 3, sku: '311066',  name: '/  11357' },                // numeric w/ spaces
+        { line_index: 4, sku: '670441',  name: 'KS BF JOGGER' },
+        { line_index: 5, sku: '312567',  name: '/ HEAT PANT' },             // nickname -> previous sku
+        { line_index: 6, sku: '854342',  name: '*DIET COKE** P70' },
+        { line_index: 7, sku: '3574',    name: 'VT BOTTLE DEPST EE/854342' }, // deposit -> 854342
+      ],
+    },
+  ];
+  const rows = serializeItemsCsv(orders).trimEnd().split('\r\n').slice(1);
+  const parents = rows.map((r) => r.split(',').slice(-1)[0]);
+  assert.deepEqual(parents, ['', '1218715', '', '11357', '', '670441', '', '854342']);
 });
 
 test('items CSV guards formula injection in text but not numeric fields', () => {

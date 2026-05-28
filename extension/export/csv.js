@@ -32,7 +32,18 @@ const ITEM_COLUMNS = [
   'category_label',
   'is_adjustment',
   'adjustment_reason',
+  'parent_sku',
 ];
+
+// Costco prints adjustments right after the item they apply to. Discount lines
+// usually carry the parent's itemNumber in the name (e.g. "/1218715",
+// "/  11357" with variable spacing; deposit lines like "VT BOTTLE DEPST EE/854342"
+// too). For nicknamed discounts (e.g. "/ HEAT PANT") we fall back to the
+// previous non-adjustment item's sku in the same order. Returns null otherwise.
+function findParentSku(name) {
+  const m = String(name ?? '').match(/\/\s*(\d+)/);
+  return m ? m[1] : null;
+}
 
 // Human label for category_native: Costco dept codes -> names; otherwise the
 // raw value (Target's dpci department code) passes through.
@@ -94,8 +105,15 @@ export function serializeOrdersCsv(orders, retailer) {
 export function serializeItemsCsv(orders, retailer) {
   const rows = [csvRow(ITEM_COLUMNS)];
   for (const o of filterByRetailer(orders, retailer)) {
+    let lastProductSku = null; // positional fallback for nicknamed discount lines
     for (const item of o.items || []) {
       const reason = classifyAdjustment(item.name);
+      let parentSku = null;
+      if (reason) {
+        parentSku = findParentSku(item.name) ?? (reason === 'discount' ? lastProductSku : null);
+      } else {
+        if (item.sku != null) lastProductSku = item.sku;
+      }
       rows.push(
         csvRow([
           o.retailer,
@@ -111,6 +129,7 @@ export function serializeItemsCsv(orders, retailer) {
           safeText(categoryLabel(o.retailer, item.category_native)),
           reason ? 'true' : 'false',
           reason ?? '',
+          parentSku ?? '',
         ])
       );
     }
