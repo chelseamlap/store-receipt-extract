@@ -16,6 +16,7 @@ const ORDER_COLUMNS = [
   'shipping',
   'fulfillment_type',
   'item_count',
+  'receipt_url',
 ];
 
 const ITEM_COLUMNS = [
@@ -30,10 +31,38 @@ const ITEM_COLUMNS = [
   'line_total',
   'category_native',
   'category_label',
+  'fsa_eligible',
   'is_adjustment',
   'adjustment_reason',
   'parent_sku',
 ];
+
+// Link back to the retailer's order/receipt page, useful for HSA/FSA receipt
+// submissions. Derived from retailer + channel + order_id; empty when no per-
+// order URL exists (Costco warehouse/gas/car-wash receipts are only viewable
+// via the filtered list page).
+function receiptUrlFor(order) {
+  const id = order?.order_id;
+  if (!id) return '';
+  if (order.retailer === 'target') {
+    return order.order_channel === 'in_store'
+      ? `https://www.target.com/orders/stores/${id}`
+      : `https://www.target.com/orders/${id}`;
+  }
+  if (order.retailer === 'costco' && order.order_channel === 'online') {
+    return `https://www.costco.com/OrderDetailPrintView?orderId=${id}`;
+  }
+  return '';
+}
+
+// fsa_eligible cell value. true/false render as strings; null/undefined stay
+// blank (unknown — currently the case for Target lines and Costco in-warehouse
+// receipts, neither of which expose the flag in their APIs).
+function fsaCell(value) {
+  if (value === true) return 'true';
+  if (value === false) return 'false';
+  return '';
+}
 
 // Costco prints adjustments right after the item they apply to. Discount lines
 // usually carry the parent's itemNumber in the name (e.g. "/1218715",
@@ -96,6 +125,7 @@ export function serializeOrdersCsv(orders, retailer) {
         o.shipping,
         safeText(o.fulfillment_type),
         Array.isArray(o.items) ? o.items.length : 0,
+        receiptUrlFor(o),
       ])
     );
   }
@@ -127,6 +157,7 @@ export function serializeItemsCsv(orders, retailer) {
           item.line_total,
           safeText(item.category_native),
           safeText(categoryLabel(o.retailer, item.category_native)),
+          fsaCell(item.fsa_eligible),
           reason ? 'true' : 'false',
           reason ?? '',
           parentSku ?? '',

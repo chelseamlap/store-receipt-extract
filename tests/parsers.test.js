@@ -157,6 +157,7 @@ test('parseCostcoOnlineOrders normalizes the array-wrapped envelope, drops email
   assert.equal(o.subtotal, null); // prices only come from getOrderDetails
   assert.equal(o.items[0].sku, '1111111');
   assert.equal(o.items[0].unit_price, null);
+  assert.equal(o.items[0].fsa_eligible, true, 'isFSAEligible plumbed onto item');
   assert.ok(!JSON.stringify(o).includes('emailAddress'), 'PII dropped from raw');
 });
 

@@ -348,7 +348,7 @@ const GET_ONLINE_ORDERS = `query getOnlineOrders($startDate:String!,$endDate:Str
   getOnlineOrders(startDate:$startDate,endDate:$endDate,pageNumber:$pageNumber,pageSize:$pageSize,warehouseNumber:$warehouseNumber){
     pageNumber pageSize totalNumberOfRecords
     bcOrders{ orderHeaderId orderPlacedDate:orderedDate orderNumber:sourceOrderNumber orderTotal warehouseNumber status
-      orderLineItems{ itemId itemNumber lineNumber itemDescription } }
+      orderLineItems{ itemId itemNumber lineNumber itemDescription isFSAEligible } }
   }
 }`;
 

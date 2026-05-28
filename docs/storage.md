@@ -117,13 +117,13 @@ double quotes with embedded quotes doubled.
 `orders_<retailer>_<YYYYMMDD-HHMMSS>.csv`:
 
 ```
-retailer,order_channel,order_id,account_hint,ordered_at,total,subtotal,tax,shipping,fulfillment_type,item_count
+retailer,order_channel,order_id,account_hint,ordered_at,total,subtotal,tax,shipping,fulfillment_type,item_count,receipt_url
 ```
 
 `order_items_<retailer>_<YYYYMMDD-HHMMSS>.csv`:
 
 ```
-retailer,order_channel,order_id,line_index,sku,name,quantity,unit_price,line_total,category_native,category_label,is_adjustment,adjustment_reason,parent_sku
+retailer,order_channel,order_id,line_index,sku,name,quantity,unit_price,line_total,category_native,category_label,fsa_eligible,is_adjustment,adjustment_reason,parent_sku
 ```
 
 `is_adjustment` / `adjustment_reason` flag non-product lines (derived at export
@@ -144,6 +144,23 @@ codes are mapped via `extension/export/costco-departments.js` (best-effort,
 user-extended — unknown codes show `Dept <n>`); Target's dpci department code
 passes through unchanged. Labels are applied at export time, so editing the map
 and re-exporting updates them without re-scanning.
+
+`fsa_eligible` is sourced from Costco's `isFSAEligible` on `getOnlineOrders`
+line items (true/false). Blank for retailer/channel combinations that don't
+expose the flag in their API: **Target** (UI computes it client-side; no field
+in the captured post_orders response), **Costco in-warehouse / gas / car-wash**
+(receiptsWithCounts has no FSA flag — the Orders & Purchases > FSA Orders page
+hits an as-yet-uncaptured endpoint). Useful for HSA/FSA receipt submission
+prep.
+
+`receipt_url` is an order-level deep-link to the retailer's receipt page,
+intended for HSA/FSA submission attachments. Derived from retailer + channel +
+order_id at export time (no extra storage):
+- Target online → `https://www.target.com/orders/<order_id>`
+- Target in-store → `https://www.target.com/orders/stores/<order_id>`
+- Costco online → `https://www.costco.com/OrderDetailPrintView?orderId=<order_id>`
+- Costco in-warehouse / gas / car-wash → blank (no per-receipt URL; the
+  warehouse receipts page is filtered, not addressable per-barcode)
 
 ### JSON (one file)
 

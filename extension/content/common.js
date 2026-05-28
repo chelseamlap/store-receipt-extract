@@ -253,6 +253,7 @@ export function parseCostcoOnlineOrders(envelope) {
       line_total: null,
       category_native: null, // Costco online exposes no category
       dpci: null,
+      fsa_eligible: typeof li?.isFSAEligible === 'boolean' ? li.isFSAEligible : null,
       raw_item: li,
     }));
     const { emailAddress, ...rawSafe } = o; // drop the one PII field

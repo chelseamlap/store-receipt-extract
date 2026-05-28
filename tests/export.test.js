@@ -59,17 +59,28 @@ test('csvField escapes commas, quotes, and newlines per RFC 4180', () => {
 test('serializeOrdersCsv writes header, item_count, and blank for null', () => {
   const csv = serializeOrdersCsv(sampleOrders());
   const lines = csv.trimEnd().split('\r\n');
-  assert.equal(lines[0], 'retailer,order_channel,order_id,account_hint,ordered_at,total,subtotal,tax,shipping,fulfillment_type,item_count');
+  assert.equal(lines[0], 'retailer,order_channel,order_id,account_hint,ordered_at,total,subtotal,tax,shipping,fulfillment_type,item_count,receipt_url');
   assert.ok(lines[1].startsWith('target,online,900000000000001,me@example.com,'));
-  assert.ok(lines[1].endsWith(',ShipToHome,2'), 'item_count = 2');
-  // costco row
+  assert.ok(lines[1].endsWith(',ShipToHome,2,https://www.target.com/orders/900000000000001'), 'item_count + receipt_url');
+  // costco warehouse row has no per-receipt URL (last column blank)
   assert.ok(lines[2].startsWith('costco,in_warehouse,C-1,,'));
+  assert.ok(lines[2].endsWith(',1,'), 'costco warehouse: item_count then blank receipt_url');
+});
+
+test('receipt_url covers target store + costco online channels', () => {
+  const orders = [
+    { retailer: 'target', order_channel: 'in_store', order_id: '6136-1776-0171-6535', items: [] },
+    { retailer: 'costco', order_channel: 'online', order_id: '1224652813', items: [] },
+  ];
+  const lines = serializeOrdersCsv(orders).trimEnd().split('\r\n');
+  assert.ok(lines[1].endsWith(',https://www.target.com/orders/stores/6136-1776-0171-6535'));
+  assert.ok(lines[2].endsWith(',https://www.costco.com/OrderDetailPrintView?orderId=1224652813'));
 });
 
 test('serializeItemsCsv flattens items and quotes tricky fields', () => {
   const csv = serializeItemsCsv(sampleOrders());
   const lines = csv.trimEnd().split('\r\n');
-  assert.equal(lines[0], 'retailer,order_channel,order_id,line_index,sku,name,quantity,unit_price,line_total,category_native,category_label,is_adjustment,adjustment_reason,parent_sku');
+  assert.equal(lines[0], 'retailer,order_channel,order_id,line_index,sku,name,quantity,unit_price,line_total,category_native,category_label,fsa_eligible,is_adjustment,adjustment_reason,parent_sku');
   assert.equal(lines.length, 1 + 3, 'header + 3 item rows');
   assert.ok(csv.includes('"Paper Towels, 6 ""Mega"" Rolls"'));
   assert.ok(csv.includes('"Eggs, 24 ct\nlarge"'));
@@ -89,8 +100,8 @@ test('items CSV includes order_channel and a Costco department label', () => {
   ];
   const lines = serializeItemsCsv(orders).trimEnd().split('\r\n');
   assert.ok(lines[1].startsWith('costco,in_warehouse,W-1,'), 'channel present on item rows');
-  assert.ok(lines[1].includes(',92,Pharmacy,false,'), 'known dept mapped to name');
-  assert.ok(lines[2].includes(',777,Dept 777,false,'), 'unknown dept falls back to Dept N');
+  assert.ok(lines[1].includes(',92,Pharmacy,,false,'), 'known dept mapped to name (fsa_eligible blank)');
+  assert.ok(lines[2].includes(',777,Dept 777,,false,'), 'unknown dept falls back to Dept N');
 });
 
 test('Target category_label passes the dpci code through (no Costco map)', () => {
@@ -98,7 +109,7 @@ test('Target category_label passes the dpci code through (no Costco map)', () =>
     { retailer: 'target', order_channel: 'online', order_id: 'T-1', items: [{ line_index: 0, sku: 't', name: 'x', category_native: '037' }] },
   ];
   const row = serializeItemsCsv(orders).trimEnd().split('\r\n')[1];
-  assert.ok(row.includes(',037,037,false,'), 'target dpci code passes through as label');
+  assert.ok(row.includes(',037,037,,false,'), 'target dpci code passes through as label (fsa_eligible blank)');
 });
 
 test('items CSV flags adjustments with a reason (discount / deposit / fee)', () => {
@@ -139,6 +150,23 @@ test('items CSV links Costco adjustments to their parent sku (numeric + position
   const rows = serializeItemsCsv(orders).trimEnd().split('\r\n').slice(1);
   const parents = rows.map((r) => r.split(',').slice(-1)[0]);
   assert.deepEqual(parents, ['', '1218715', '', '11357', '', '670441', '', '854342']);
+});
+
+test('items CSV emits fsa_eligible (true/false/blank) per item', () => {
+  const orders = [
+    {
+      retailer: 'costco', order_channel: 'online', order_id: 'C-FSA',
+      items: [
+        { line_index: 0, sku: '1', name: 'CONTACT LENS SOLN', fsa_eligible: true },
+        { line_index: 1, sku: '2', name: 'PAPER TOWELS',     fsa_eligible: false },
+        { line_index: 2, sku: '3', name: 'UNKNOWN' /* no fsa_eligible -> blank */ },
+      ],
+    },
+  ];
+  const rows = serializeItemsCsv(orders).trimEnd().split('\r\n').slice(1);
+  // fsa_eligible sits between category_label and is_adjustment (3rd-from-last block)
+  const fsa = rows.map((r) => r.split(',').slice(-4, -3)[0]);
+  assert.deepEqual(fsa, ['true', 'false', '']);
 });
 
 test('items CSV guards formula injection in text but not numeric fields', () => {

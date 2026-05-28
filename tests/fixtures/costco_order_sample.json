@@ -23,7 +23,8 @@
                   "itemDescription": "Organic Eggs, 24 ct",
                   "lineNumber": 1,
                   "status": "DELIVERED",
-                  "shippingType": "GROCERY"
+                  "shippingType": "GROCERY",
+                  "isFSAEligible": true
                 }
               ]
             }
