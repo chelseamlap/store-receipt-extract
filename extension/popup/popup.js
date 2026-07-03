@@ -9,6 +9,39 @@ import { serializeFullJson } from '../export/json.js';
 const RETAILERS = ['target', 'costco'];
 const statusEl = document.getElementById('status');
 
+// Per-user location settings live in chrome.storage.sync under this key, shaped
+// like the runtime config the worker merges: { costco: { warehouse_number } }.
+// storage.sync rides Chrome profile sync, so a value saved here appears on every
+// computer signed into the same profile (needs the pinned extension id from the
+// manifest "key"). The worker reads the same key in loadConfig().
+const SYNC_CONFIG_KEY = 'config';
+
+async function loadSettingsForm() {
+  const input = document.getElementById('costco-warehouse');
+  try {
+    const data = await chrome.storage.sync.get(SYNC_CONFIG_KEY);
+    input.value = data[SYNC_CONFIG_KEY]?.costco?.warehouse_number ?? '';
+  } catch (err) {
+    setStatus(`Couldn't read settings: ${err.message}`);
+  }
+}
+
+async function saveSettings() {
+  const input = document.getElementById('costco-warehouse');
+  const warehouse = input.value.trim();
+  try {
+    const data = await chrome.storage.sync.get(SYNC_CONFIG_KEY);
+    const cfg = data[SYNC_CONFIG_KEY] || {};
+    cfg.costco = { ...(cfg.costco || {}) };
+    if (warehouse) cfg.costco.warehouse_number = warehouse;
+    else delete cfg.costco.warehouse_number;
+    await chrome.storage.sync.set({ [SYNC_CONFIG_KEY]: cfg });
+    setStatus(warehouse ? `Saved warehouse #${warehouse} (syncs across your computers).` : 'Cleared warehouse number.');
+  } catch (err) {
+    setStatus(`Couldn't save settings: ${err.message}`);
+  }
+}
+
 // Account label resolution matches background.js: config.<retailer>.account_name
 // is an optional override; otherwise we use what the worker auto-detected from
 // the live session (Costco JWT given_name, Target order address first_name) and
@@ -196,7 +229,9 @@ function wireEvents() {
     section.querySelector('[data-action="export-csv"]').addEventListener('click', () => exportCsv(retailer));
     section.querySelector('[data-action="export-json"]').addEventListener('click', () => exportJson(retailer));
   }
+  document.querySelector('[data-action="save-settings"]').addEventListener('click', saveSettings);
 }
 
 wireEvents();
+loadSettingsForm();
 refreshStats().catch((err) => setStatus(`Failed to load stats: ${err.message}`));

@@ -77,9 +77,14 @@ function mergeConfig(base, override) {
   return out;
 }
 
-// Runtime config: public defaults overlaid with the optional gitignored
-// config.local.json (location IDs). Loaded once, cached. The file is optional —
-// if it can't be read, the public defaults still let Target scan.
+// Runtime config, highest priority last:
+//   PUBLIC_CONFIG_DEFAULTS  <-  config.local.json (gitignored file)  <-  chrome.storage.sync
+// The file is optional. chrome.storage.sync holds per-user location IDs
+// (e.g. costco.warehouse_number) and rides Chrome profile sync across machines,
+// so a value set in the popup on one computer shows up on the rest — no file to
+// copy. Requires the pinned extension id from manifest "key" (same id everywhere).
+// Loaded once, cached; the cache is invalidated below when the synced value changes.
+const SYNC_CONFIG_KEY = 'config';
 let configPromise = null;
 async function loadConfig() {
   if (!configPromise) {
@@ -92,11 +97,24 @@ async function loadConfig() {
       } catch (err) {
         console.warn('[sre] config.local.json unreadable; using public defaults:', err.message);
       }
-      return mergeConfig(PUBLIC_CONFIG_DEFAULTS, fileCfg);
+      let syncCfg = {};
+      try {
+        const data = await chrome.storage.sync.get(SYNC_CONFIG_KEY);
+        if (data[SYNC_CONFIG_KEY]) syncCfg = data[SYNC_CONFIG_KEY];
+      } catch (err) {
+        console.warn('[sre] storage.sync unreadable; skipping synced config:', err.message);
+      }
+      return mergeConfig(mergeConfig(PUBLIC_CONFIG_DEFAULTS, fileCfg), syncCfg);
     })();
   }
   return configPromise;
 }
+
+// Drop the cache when the synced config changes (edited in the popup here or on
+// another machine) so the next scan re-reads it.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'sync' && changes[SYNC_CONFIG_KEY]) configPromise = null;
+});
 
 // Write the final scan_state on clean completion: set latest_order_id_seen to
 // this scan's newest order and clear any resume cursor (setScanState replaces
