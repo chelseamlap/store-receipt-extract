@@ -42,12 +42,20 @@ function decodeJwtPayload(token) {
   }
 }
 
+// Placeholder tokens some providers put in name claims when nothing is set
+// (Costco's JWT uses "empty"). These are not real names — reject them so they
+// don't leak into account_hint / filenames (e.g. order_items_costco_empty_...).
+const PLACEHOLDER_NAMES = new Set(['empty', 'null', 'undefined', 'none', 'n/a', 'na', 'guest', 'unknown', 'anonymous']);
+function isPlaceholderName(value) {
+  return PLACEHOLDER_NAMES.has(String(value ?? '').trim().toLowerCase());
+}
+
 // A short, filename-safe label derived from a person name (preferring a first
 // name) — used as account_hint and filename segment. Falls back to a short id.
 function safeAccountLabel(value) {
   if (value == null) return null;
   const s = String(value).trim();
-  if (!s) return null;
+  if (!s || isPlaceholderName(s)) return null;
   return s.replace(/[^A-Za-z0-9._-]+/g, '_').toLowerCase();
 }
 
@@ -58,7 +66,8 @@ async function getStoredAccount(retailer) {
 }
 async function setStoredAccount(retailer, label) {
   const key = retailer === 'target' ? 'targetAccount' : 'costcoAccount';
-  await chrome.storage.local.set({ [key]: label }).catch(() => {});
+  if (label) await chrome.storage.local.set({ [key]: label }).catch(() => {});
+  else await chrome.storage.local.remove(key).catch(() => {}); // clear stale/placeholder value
 }
 
 // Resolve the account label for a scan: explicit config override wins, then the
@@ -66,7 +75,8 @@ async function setStoredAccount(retailer, label) {
 async function resolveAccountHint(retailer, config) {
   const override = config?.[retailer]?.account_name;
   if (override) return safeAccountLabel(override);
-  return await getStoredAccount(retailer);
+  const stored = await getStoredAccount(retailer);
+  return isPlaceholderName(stored) ? null : stored;
 }
 
 function mergeConfig(base, override) {
@@ -306,13 +316,17 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
       // as account_hint + filename segment so shared logins don't get mixed.
       const auth = Object.entries(grabbed).find(([k]) => k.toLowerCase() === 'costco-x-authorization')?.[1];
       const payload = decodeJwtPayload(auth);
+      // Skip placeholder claims so a real candidate (or the oid) is used instead.
+      const named = (v) => (v && !isPlaceholderName(v) ? v : null);
       const label = safeAccountLabel(
-        payload?.given_name ||
-          (payload?.name && String(payload.name).split(/\s+/)[0]) ||
-          payload?.unique_name ||
+        named(payload?.given_name) ||
+          named(payload?.name && String(payload.name).split(/\s+/)[0]) ||
+          named(payload?.unique_name) ||
           (payload?.oid ? String(payload.oid).replace(/-/g, '').slice(0, 8) : null)
       );
-      if (label) setStoredAccount('costco', label);
+      // Set the resolved label; if none, clear any stale/placeholder value so the
+      // filename gets no account segment rather than a bogus one.
+      setStoredAccount('costco', label);
     }
   },
   { urls: ['https://ecom-api.costco.com/*'] },

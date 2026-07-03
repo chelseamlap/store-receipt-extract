@@ -56,16 +56,24 @@ function loadConfig() {
   }
   return configPromise;
 }
+// Placeholder name claims (e.g. Costco's "empty") are not real accounts — never
+// let them become a filename segment. Mirrors isPlaceholderName in background.js.
+const PLACEHOLDER_NAMES = new Set(['empty', 'null', 'undefined', 'none', 'n/a', 'na', 'guest', 'unknown', 'anonymous']);
+function isPlaceholderName(value) {
+  return PLACEHOLDER_NAMES.has(String(value ?? '').trim().toLowerCase());
+}
+
 async function accountSuffix(retailer) {
   const cfg = await loadConfig();
   const override = cfg?.[retailer]?.account_name;
-  if (override) {
+  if (override && !isPlaceholderName(override)) {
     const safe = String(override).trim().replace(/[^A-Za-z0-9._-]+/g, '_');
     return safe ? `_${safe}` : '';
   }
   const key = retailer === 'target' ? 'targetAccount' : 'costcoAccount';
   const data = await chrome.storage.local.get(key);
-  return data[key] ? `_${data[key]}` : '';
+  const label = data[key];
+  return label && !isPlaceholderName(label) ? `_${label}` : '';
 }
 
 function setStatus(text) {
