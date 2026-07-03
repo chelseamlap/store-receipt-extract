@@ -18,6 +18,12 @@
       button:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
       button:disabled { opacity: 0.5; cursor: default; }
       .row { display: flex; gap: 6px; flex-wrap: wrap; }
+      .settings { border: 1px solid color-mix(in srgb, currentColor 20%, transparent); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+      .settings h2 { font-size: 13px; margin: 0 0 6px; }
+      .field { display: flex; align-items: center; gap: 6px; }
+      .field label { flex: none; }
+      .field input { flex: 1; min-width: 0; font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid color-mix(in srgb, currentColor 30%, transparent); background: transparent; color: inherit; }
+      .hint { font-size: 11px; opacity: 0.7; margin: 6px 0 0; }
       #status { font-size: 12px; min-height: 16px; margin-top: 8px; opacity: 0.9; }
     </style>
   </head>
@@ -51,6 +57,16 @@
         <button data-action="export-csv">Export CSV</button>
         <button data-action="export-json">Export JSON</button>
       </div>
+    </section>
+
+    <section class="settings">
+      <h2>Settings</h2>
+      <div class="field">
+        <label for="costco-warehouse">Costco warehouse #</label>
+        <input id="costco-warehouse" type="text" inputmode="numeric" placeholder="e.g. 443" />
+        <button data-action="save-settings">Save</button>
+      </div>
+      <p class="hint">Your home warehouse number. Syncs across computers via your Chrome profile.</p>
     </section>
 
     <div id="status" role="status" aria-live="polite"></div>

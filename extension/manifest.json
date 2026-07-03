@@ -3,6 +3,7 @@
   "name": "store-receipt-extract",
   "version": "0.1.0",
   "description": "Extract itemized Target + Costco order history to CSV/JSON for personal spend analysis. Local-only.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAx0kddiVZR1/WlFDCJYPPI3z5pU+F4XUWFeXyR/9waVdmvt4M/P4sNtQveOEglIRPcqvm9qPO9GXwfmCViApATeoqi1ZtrfUPx/awjDvgSKSw/UuOWUg9KlIMnsftHMgBObxK5eErdwV3w5GJUUFQHC5+S/RABxDur6Cs3bUuV6WC7KJvDFyXg4MgqbXz5hqkk2giM2R+IwNw2jDUYqnDfoiKsA1pBU5xAPT1t8xGi9FHGd7GNTUVPF+zth0vY4QLE0U1dIxcjNJOajxv9I+5zhrVnGK9rduNNoi0nQ+LxcRI9+uWrp3mNFE3t2MJeCwY1z8OoFxPd4HZB9wDcbA8yQIDAQAB",
   "permissions": ["storage", "downloads", "webRequest", "declarativeNetRequestWithHostAccess"],
   "host_permissions": [
     "https://www.target.com/*",
